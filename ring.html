@@ -36,7 +36,7 @@
       document.getElementById('status').innerText = '🔃 Zil çalınıyor...';
 
       try {
-        const response = await fetch('https://<PROJEN_ADI>.functions.supabase.co/ring-bell', {
+        const response = await fetch('https://treltdjwhlxmpgidoqvj.functions.supabase.co/ring-bell', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ qr_token, visitor_name, visitor_message })
@@ -45,7 +45,7 @@
         const result = await response.json();
 
         if (result.success) {
-          document.getElementById('status').innerHTML = `✅ Zil çalındı. Sohbete geçmek için <a href="chat.html?session_id=${result.session_id}">tıklayın</a>`;
+          document.getElementById('status').innerHTML = `✅ Zil çalındı.<br><a href='chat.html?session_id=${result.session_id}'>Canlı sohbeti başlat</a>`;
         } else {
           document.getElementById('status').innerText = '❌ Hata: ' + result.error;
         }
