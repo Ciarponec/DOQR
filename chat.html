@@ -25,7 +25,9 @@
   <script>
     const urlParams = new URLSearchParams(window.location.search);
     const session_id = urlParams.get('session_id');
-    const API_URL = 'https://treltdjwhlxmpgidoqvj.functions.supabase.co/send-chat-message';
+    const API_URL = 'https://npvwenwghmxmrzqbfgbq.supabase.co/functions/v1/send-chat-message';
+    const SUPABASE_URL = 'https://npvwenwghmxmrzqbfgbq.supabase.co';
+    const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5wdndlbndnaG14bXJ6cWJmZ2JxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgyMDE1NDMsImV4cCI6MjA2Mzc3NzU0M30.feUs88g74qKEZU57LUF8lIobs_DuEjCZs-PQnHxmhtk'; // Bunu doğru anon key ile değiştirmen gerekir
 
     if (!session_id) {
       alert('Geçersiz oturum.');
@@ -42,15 +44,16 @@
       });
 
       document.getElementById('chatInput').value = '';
+      await pollMessages(); // mesajı hemen göster
     }
 
     async function pollMessages() {
       if (!session_id) return;
 
-      const res = await fetch(`https://treltdjwhlxmpgidoqvj.supabase.co/rest/v1/chat_messages?session_ref=eq.${session_id}&order=created_at.asc`, {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/chat_messages?session_ref=eq.${session_id}&order=created_at.asc`, {
         headers: {
-          'apikey': 'anon-key',
-          'Authorization': 'Bearer anon-key'
+          'apikey': SUPABASE_ANON,
+          'Authorization': `Bearer ${SUPABASE_ANON}`
         }
       });
 
