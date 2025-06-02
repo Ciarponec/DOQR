@@ -2,10 +2,55 @@
 <html lang="tr">
 <head>
   <meta charset="UTF-8" />
-  <title>DOQR Ana Sayfa</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DOQR - Zili Çal</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; padding: 2em; }
+    input, textarea, button {
+      margin-top: 1em;
+      padding: 0.6em;
+      width: 100%;
+      max-width: 300px;
+    }
+    .container { max-width: 400px; margin: auto; }
+    .hidden { display: none; }
+  </style>
 </head>
 <body>
-  <h1>👋 Hoş geldiniz!</h1>
-  <p><a href="ring.html">Zil Çağırma Sayfası (ring.html)</a></p>
+  <div class="container">
+    <h2>🔔 Zili Çal</h2>
+    <p>Lütfen isminizi ve mesajınızı girin (isteğe bağlı):</p>
+    <input type="text" id="visitorName" placeholder="Adınız (isteğe bağlı)" />
+    <textarea id="visitorMessage" placeholder="Mesajınız"></textarea>
+    <button onclick="ringBell()">Zili Çal</button>
+    <div id="status"></div>
+  </div>
+
+  <script>
+    async function ringBell() {
+      const name = document.getElementById('visitorName').value;
+      const message = document.getElementById('visitorMessage').value;
+
+      const status = document.getElementById('status');
+      status.textContent = 'Gönderiliyor...';
+
+      try {
+        // Burayı kendi webhook/Supabase endpointinle değiştir
+        const response = await fetch('https://your-api-endpoint.com/ring', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, message, timestamp: new Date().toISOString() }),
+        });
+
+        if (response.ok) {
+          status.textContent = '🔔 Zil başarıyla çalındı!';
+        } else {
+          status.textContent = '❌ Bir hata oluştu. Lütfen tekrar deneyin.';
+        }
+      } catch (e) {
+        status.textContent = '❌ Ağ hatası. İnternet bağlantınızı kontrol edin.';
+      }
+    }
+  </script>
 </body>
 </html>
