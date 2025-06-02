@@ -1,73 +1,44 @@
-<!DOCTYPE html>
-<html lang="tr">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DOQR - Zili Çal</title>
-  <style>
-    body { font-family: sans-serif; text-align: center; padding: 2em; }
-    input, textarea, button {
-      margin-top: 1em;
-      padding: 0.6em;
-      width: 100%;
-      max-width: 300px;
-    }
-    .container { max-width: 400px; margin: auto; }
-    .hidden { display: none; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h2>🔔 Zili Çal</h2>
-    <p>Lütfen isminizi ve mesajınızı girin (isteğe bağlı):</p>
-    <input type="text" id="visitorName" placeholder="Adınız (isteğe bağlı)" />
-    <textarea id="visitorMessage" placeholder="Mesajınız"></textarea>
-    <button onclick="ringBell()">Zili Çal</button>
-    <div id="status"></div>
-  </div>
+<script>
+  async function ringBell() {
+    const name = document.getElementById('visitorName').value;
+    const message = document.getElementById('visitorMessage').value;
+    const urlParams = new URLSearchParams(window.location.search);
+    const qr_token = urlParams.get('qr');
+    const status = document.getElementById('status');
 
-  <script>
-    console.log('🟡 ringBell fonksiyonu çalıştı');
-
-    async function ringBell() {
-  const name = document.getElementById('visitorName').value;
-  const message = document.getElementById('visitorMessage').value;
-
-  const urlParams = new URLSearchParams(window.location.search);
-  const qr_token = urlParams.get('qr');
-
-  const status = document.getElementById('status');
-  status.textContent = 'Gönderiliyor...';
-
-  // ❗ Eğer qr_token boşsa gönderme
-  if (!qr_token) {
-    status.textContent = '❌ QR token eksik!';
-    return;
-  }
-
-  try {
-    const response = await fetch('https://npvwenwghmxmrzqbfgbq.supabase.co/functions/v1/ring-bell', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        qr_token,
-        visitor_name: name,
-        visitor_message: message
-      }),
+    console.log('📦 Gönderilecek veri:', {
+      qr_token,
+      visitor_name: name,
+      visitor_message: message
     });
 
-    const result = await response.json();
-
-    if (response.ok) {
-      status.innerHTML = `🔔 Zil başarıyla çalındı!<br><br><a href="chat.html?session_id=${result.session_id}">Sohbete geç</a>`;
-    } else {
-      status.textContent = `❌ Hata: ${result.error || 'Lütfen tekrar deneyin.'}`;
+    if (!qr_token) {
+      status.textContent = '❌ QR token eksik!';
+      return;
     }
 
-  } catch (e) {
-    status.textContent = '❌ Ağ hatası. İnternet bağlantınızı kontrol edin.';
+    try {
+      const response = await fetch('https://npvwenwghmxmrzqbfgbq.supabase.co/functions/v1/ring-bell', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          qr_token,
+          visitor_name: name,
+          visitor_message: message
+        }),
+      });
+
+      const result = await response.json();
+      console.log('📥 Yanıt:', result);
+
+      if (response.ok) {
+        status.innerHTML = `🔔 Zil başarıyla çalındı!<br><br><a href="chat.html?session_id=${result.session_id}">Sohbete geç</a>`;
+      } else {
+        status.textContent = `❌ Hata: ${result.error || 'Lütfen tekrar deneyin.'}`;
+      }
+    } catch (e) {
+      console.error('❌ Ağ hatası:', e);
+      status.textContent = '❌ Ağ hatası. İnternet bağlantınızı kontrol edin.';
+    }
   }
-}
-  </script>
-</body>
-</html>
+</script>
