@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="tr">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>DOQR - Zili Çal</title>
   <style>
     body {
@@ -11,9 +11,10 @@
       padding: 2em;
     }
     input, textarea, button {
-      margin-top: 1em;
+      display: block;
+      margin: 1em auto;
       padding: 0.6em;
-      width: 100%;
+      width: 90%;
       max-width: 300px;
     }
     .container {
@@ -30,7 +31,7 @@
   <div class="container">
     <h2>🔔 Zili Çal</h2>
     <p>Lütfen isminizi ve mesajınızı girin (isteğe bağlı):</p>
-    <input type="text" id="visitorName" placeholder="Adınız (isteğe bağlı)" />
+    <input type="text" id="visitorName" placeholder="Adınız (isteğe bağlı)">
     <textarea id="visitorMessage" placeholder="Mesajınız"></textarea>
     <button onclick="ringBell()">Zili Çal</button>
     <div id="status"></div>
@@ -38,9 +39,9 @@
 
   <script>
     async function ringBell() {
+      const status = document.getElementById('status');
       const name = document.getElementById('visitorName').value;
       const message = document.getElementById('visitorMessage').value;
-      const status = document.getElementById('status');
 
       const urlParams = new URLSearchParams(window.location.search);
       const qr_token = urlParams.get('qr');
@@ -70,8 +71,10 @@
         } else {
           status.textContent = `❌ Hata: ${result.error || 'Lütfen tekrar deneyin.'}`;
         }
-      } catch (e) {
-        status.textContent = '❌ Ağ hatası. İnternet bağlantınızı kontrol edin.';
+
+      } catch (err) {
+        console.error('Fetch Hatası:', err);
+        status.textContent = '❌ Bağlantı hatası. Lütfen internetinizi kontrol edin.';
       }
     }
   </script>
