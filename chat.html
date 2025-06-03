@@ -4,82 +4,60 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>DOQR - Canlı Sohbet</title>
-  <script type="module">
-    import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-
-    const urlParams = new URLSearchParams(window.location.search);
-    const session_id = urlParams.get('session_id');
-
-    const SUPABASE_URL = 'https://npvwenwghmxmrzqbfgbq.supabase.co';
-    const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5wdndlbndnaG14bXJ6cWJmZ2JxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgyMDE1NDMsImV4cCI6MjA2Mzc3NzU0M30.feUs88g74qKEZU57LUF8lIobs_DuEjCZs-PQnHxmhtk';
-    const API_URL = `${SUPABASE_URL}/functions/v1/send-chat-message`;
-
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON);
-
-    const chatBox = document.getElementById('chatBox');
-    const chatInput = document.getElementById('chatInput');
-
-    async function loadMessages() {
-      const { data: messages } = await supabase
-        .from('chat_messages')
-        .select('*')
-        .eq('session_ref', session_id)
-        .order('created_at', { ascending: true });
-
-      chatBox.innerHTML = '';
-      messages.forEach(msg => appendMessage(msg));
-    }
-
-    function appendMessage(msg) {
-      const div = document.createElement('div');
-      div.className = 'msg' + (msg.sender === 'visitor' ? ' you' : '');
-      div.innerText = msg.text;
-      chatBox.appendChild(div);
-      chatBox.scrollTop = chatBox.scrollHeight;
-    }
-
-    async function sendMessage() {
-      const text = chatInput.value.trim();
-      if (!text) return;
-
-      await fetch(API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id, sender: 'visitor', text })
-      });
-
-      chatInput.value = '';
-    }
-
-    window.sendMessage = sendMessage;
-
-    if (!session_id) {
-      alert('Geçersiz oturum.');
-    } else {
-      loadMessages();
-
-      supabase.channel('chat_channel')
-        .on('postgres_changes', {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'chat_messages',
-          filter: `session_ref=eq.${session_id}`
-        }, payload => {
-          appendMessage(payload.new);
-        })
-        .subscribe();
-    }
-  </script>
   <style>
-    body { font-family: Arial, sans-serif; background: #f4f4f4; padding: 2em; }
-    .chat-container { max-width: 600px; margin: auto; background: #fff; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); padding: 1em; }
-    #chatBox { border: 1px solid #ccc; border-radius: 6px; padding: 1em; height: 400px; overflow-y: scroll; margin-bottom: 1em; background: #f9f9f9; }
-    .msg { padding: 0.5em 1em; margin: 0.5em 0; border-radius: 18px; max-width: 80%; }
-    .you { background: #dcf8c6; margin-left: auto; text-align: right; }
-    .msg:not(.you) { background: #ececec; }
-    input[type=text] { width: 100%; padding: 0.8em; border-radius: 6px; border: 1px solid #ccc; }
-    button { padding: 0.7em 1.5em; border: none; border-radius: 6px; background: #4CAF50; color: white; font-weight: bold; cursor: pointer; margin-top: 0.5em; }
-    button:hover { background: #45a049; }
+    body { font-family: Arial, sans-serif; background: #f4f4f4; padding: 2em; margin: 0; }
+    .chat-container {
+      max-width: 600px;
+      margin: auto;
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      padding: 1em;
+    }
+    #chatBox {
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      padding: 1em;
+      height: 400px;
+      overflow-y: scroll;
+      margin-bottom: 1em;
+      background: #f9f9f9;
+    }
+    .msg {
+      padding: 0.5em 1em;
+      margin: 0.5em 0;
+      border-radius: 18px;
+      max-width: 80%;
+      word-wrap: break-word;
+    }
+    .you {
+      background: #dcf8c6;
+      margin-left: auto;
+      text-align: right;
+    }
+    .msg:not(.you) {
+      background: #ececec;
+    }
+    #chatInput {
+      width: calc(100% - 2px);
+      padding: 0.8em;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      box-sizing: border-box;
+    }
+    button {
+      padding: 0.7em 1.5em;
+      border: none;
+      border-radius: 6px;
+      background: #4CAF50;
+      color: white;
+      font-weight: bold;
+      cursor: pointer;
+      margin-top: 0.5em;
+    }
+    button:hover {
+      background: #45a049;
+    }
   </style>
 </head>
 <body>
@@ -89,5 +67,91 @@
     <input type="text" id="chatInput" placeholder="Mesajınızı yazın...">
     <button onclick="sendMessage()">Gönder</button>
   </div>
+
+  <script type="module">
+    import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const session_id = urlParams.get('session_id');
+
+      const SUPABASE_URL = 'https://npvwenwghmxmrzqbfgbq.supabase.co';
+      const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5wdndlbndnaG14bXJ6cWJmZ2JxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgyMDE1NDMsImV4cCI6MjA2Mzc3NzU0M30.feUs88g74qKEZU57LUF8lIobs_DuEjCZs-PQnHxmhtk';
+      const API_URL = `${SUPABASE_URL}/functions/v1/send-chat-message`;
+
+      const supabase = createClient(SUPABASE_URL, SUPABASE_ANON);
+      const chatBox = document.getElementById('chatBox');
+      const chatInput = document.getElementById('chatInput');
+
+      if (!session_id) {
+        alert('Geçersiz oturum.');
+        return;
+      }
+
+      function appendMessage(msg) {
+        const chatBox = document.getElementById('chatBox');
+        if (!chatBox) return;
+        const div = document.createElement('div');
+        div.className = 'msg' + (msg.sender === 'visitor' ? ' you' : '');
+        div.innerText = msg.text;
+        chatBox.appendChild(div);
+        chatBox.scrollTop = chatBox.scrollHeight;
+      }
+
+      async function loadMessages() {
+        const { data: messages } = await supabase
+          .from('chat_messages')
+          .select('*')
+          .eq('session_ref', session_id)
+          .order('created_at', { ascending: true });
+
+        chatBox.innerHTML = '';
+        messages.forEach(msg => appendMessage(msg));
+      }
+
+      async function sendMessage() {
+        const text = chatInput.value.trim();
+        if (!text) return;
+
+        try {
+          const res = await fetch(API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ session_id, sender: 'visitor', text })
+          });
+
+          const result = await res.json();
+          if (!res.ok) {
+            alert(`❌ Hata: ${result.error || 'Mesaj gönderilemedi.'}`);
+            return;
+          }
+        } catch (e) {
+          console.error('❌ Ağ hatası:', e);
+          alert('❌ Ağ hatası.');
+        }
+
+        chatInput.value = '';
+      }
+
+      chatInput.addEventListener('keypress', function (e) {
+        if (e.key === 'Enter') sendMessage();
+      });
+
+      loadMessages();
+
+      console.log('📡 Realtime listener kuruluyor...');
+      supabase.channel('chat_channel')
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'chat_messages',
+          filter: `session_ref=eq.${session_id}`
+        }, payload => {
+          console.log('💬 Yeni mesaj geldi:', payload.new);
+          appendMessage(payload.new);
+        })
+        .subscribe();
+    });
+  </script>
 </body>
 </html>
