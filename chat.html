@@ -38,24 +38,27 @@
     .msg:not(.you) {
       background: #ececec;
     }
+    .input-row {
+      display: flex;
+      gap: 0.5em;
+    }
     #chatInput {
-      width: calc(100% - 2px);
+      flex: 1;
       padding: 0.8em;
       border-radius: 6px;
       border: 1px solid #ccc;
       box-sizing: border-box;
     }
-    button {
-      padding: 0.7em 1.5em;
+    #sendBtn {
+      padding: 0.8em 1em;
       border: none;
       border-radius: 6px;
       background: #4CAF50;
       color: white;
       font-weight: bold;
       cursor: pointer;
-      margin-top: 0.5em;
     }
-    button:hover {
+    #sendBtn:hover {
       background: #45a049;
     }
   </style>
@@ -64,8 +67,10 @@
   <div class="chat-container">
     <h2>💬 Canlı Sohbet</h2>
     <div id="chatBox"></div>
-    <input type="text" id="chatInput" placeholder="Mesajınızı yazın...">
-    <button onclick="sendMessage()">Gönder</button>
+    <div class="input-row">
+      <input type="text" id="chatInput" placeholder="Mesajınızı yazın...">
+      <button id="sendBtn">Gönder</button>
+    </div>
   </div>
 
   <script type="module">
@@ -82,6 +87,7 @@
       const supabase = createClient(SUPABASE_URL, SUPABASE_ANON);
       const chatBox = document.getElementById('chatBox');
       const chatInput = document.getElementById('chatInput');
+      const sendBtn = document.getElementById('sendBtn');
 
       if (!session_id) {
         alert('Geçersiz oturum.');
@@ -136,6 +142,8 @@
       chatInput.addEventListener('keypress', function (e) {
         if (e.key === 'Enter') sendMessage();
       });
+
+      sendBtn.addEventListener('click', sendMessage);
 
       loadMessages();
 
