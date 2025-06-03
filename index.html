@@ -14,6 +14,7 @@
     }
     .container { max-width: 400px; margin: auto; }
     .hidden { display: none; }
+    #status { margin-top: 1em; font-weight: bold; }
   </style>
 </head>
 <body>
@@ -57,13 +58,18 @@
 
         const result = await response.json();
 
+        if (response.status === 403 && result.error) {
+          status.textContent = `🚫 ${result.error}`;
+          return;
+        }
+
         if (response.ok && result.success) {
           status.innerHTML = `✅ Zil başarıyla çalındı!<br><a href="chat.html?session_id=${result.session_id}">Sohbete geç</a>`;
         } else {
           status.textContent = `❌ Hata: ${result.error || 'Zil çalma başarısız oldu.'}`;
         }
       } catch (e) {
-        status.textContent = `❌ Ağ hatası: ${e}`;
+        status.textContent = `❌ Ağ hatası: ${e.message || e}`;
       }
     }
   </script>
