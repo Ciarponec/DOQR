@@ -95,8 +95,6 @@
       }
 
       function appendMessage(msg) {
-        const chatBox = document.getElementById('chatBox');
-        if (!chatBox) return;
         const div = document.createElement('div');
         div.className = 'msg' + (msg.sender === 'visitor' ? ' you' : '');
         div.innerText = msg.text;
@@ -105,11 +103,16 @@
       }
 
       async function loadMessages() {
-        const { data: messages } = await supabase
+        const { data: messages, error } = await supabase
           .from('chat_messages')
           .select('*')
           .eq('session_ref', session_id)
           .order('created_at', { ascending: true });
+
+        if (error) {
+          console.error('Mesajlar yüklenemedi:', error);
+          return;
+        }
 
         chatBox.innerHTML = '';
         messages.forEach(msg => appendMessage(msg));
@@ -147,7 +150,6 @@
 
       loadMessages();
 
-      console.log('📡 Realtime listener kuruluyor...');
       supabase.channel('chat_channel')
         .on('postgres_changes', {
           event: 'INSERT',
@@ -155,7 +157,6 @@
           table: 'chat_messages',
           filter: `session_ref=eq.${session_id}`
         }, payload => {
-          console.log('💬 Yeni mesaj geldi:', payload.new);
           appendMessage(payload.new);
         })
         .subscribe();
