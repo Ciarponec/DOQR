@@ -5,14 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>DOQR - Canlı Sohbet</title>
   <style>
-    body { font-family: Arial, sans-serif; background: #f4f4f4; padding: 2em; margin: 0; }
+    body { font-family: Arial, sans-serif; background: #f4f4f4; margin: 0; padding: 0; }
     .chat-container {
       max-width: 600px;
-      margin: auto;
+      margin: 20px auto;
       background: #fff;
       border-radius: 8px;
       box-shadow: 0 0 10px rgba(0,0,0,0.1);
       padding: 1em;
+    }
+    h2 {
+      margin-top: 0;
     }
     #chatBox {
       border: 1px solid #ccc;
@@ -58,7 +61,7 @@
       font-weight: bold;
       cursor: pointer;
     }
-    video { width: 100%; max-height: 150px; border-radius: 8px; margin-bottom: 10px; }
+    video { width: 100%; max-height: 150px; border-radius: 8px; margin-bottom: 10px; display: none; }
   </style>
 </head>
 <body>
@@ -83,7 +86,7 @@
       const session_id = urlParams.get('session_id');
 
       const SUPABASE_URL = 'https://npvwenwghmxmrzqbfgbq.supabase.co';
-      const SUPABASE_ANON = 'ey...'; // kısaltıldı
+      const SUPABASE_ANON = 'ey...'; // gerçek token ile değiştir
 
       const supabase = createClient(SUPABASE_URL, SUPABASE_ANON);
 
@@ -103,7 +106,7 @@
       }
 
       async function loadMessages() {
-        const { data: messages, error } = await supabase
+        const { data: messages } = await supabase
           .from('chat_messages')
           .select('*')
           .eq('session_ref', session_id)
@@ -129,7 +132,7 @@
       });
       sendBtn.addEventListener('click', sendMessage);
 
-      supabase.channel('chat_channel')
+      supabase.channel(`chat_channel_${session_id}`)
         .on('postgres_changes', {
           event: 'INSERT',
           schema: 'public',
@@ -144,7 +147,7 @@
       await startWebRTCAnswer(session_id);
 
       async function startWebRTCAnswer(sessionId) {
-        const { data: callData, error } = await supabase
+        const { data: callData } = await supabase
           .from('calls')
           .select('*')
           .eq('session_id', sessionId)
@@ -152,10 +155,7 @@
           .limit(1)
           .single();
 
-        if (error || !callData?.sdp_offer) {
-          console.error('❌ SDP offer alınamadı:', error);
-          return;
-        }
+        if (!callData?.sdp_offer) return;
 
         const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
         peerConnection = new RTCPeerConnection(config);
@@ -167,7 +167,6 @@
         peerConnection.onicecandidate = (event) => {
           if (event.candidate) {
             console.log('📡 ICE (web):', event.candidate);
-            // Supabase'e yazılabilir
           }
         };
 
@@ -176,11 +175,15 @@
           video: callData.call_type === 'video'
         });
 
+        if (callData.call_type === 'video') {
+          document.getElementById('remoteVideo').style.display = 'block';
+          document.getElementById('localVideo').style.display = 'block';
+          document.getElementById('localVideo').srcObject = localStream;
+        }
+
         localStream.getTracks().forEach((track) => {
           peerConnection.addTrack(track, localStream);
         });
-
-        document.getElementById('localVideo').srcObject = localStream;
 
         await peerConnection.setRemoteDescription({
           type: 'offer',
