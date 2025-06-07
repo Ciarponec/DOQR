@@ -25,6 +25,14 @@
     <textarea id="visitorMessage" placeholder="Mesajınız"></textarea>
     <button type="button" onclick="ringBell()">Zili Çal</button>
     <div id="status"></div>
+
+    <!-- Görüşme seçenekleri -->
+    <div id="communication-options" class="hidden">
+      <p>Görüşme seçenekleri:</p>
+      <button id="chatBtn">💬 Yazılı Chat</button>
+      <button id="voiceBtn" class="hidden">🔊 Sesli Görüşme</button>
+      <button id="videoBtn" class="hidden">🎥 Görüntülü Görüşme</button>
+    </div>
   </div>
 
   <script>
@@ -64,7 +72,41 @@
         }
 
         if (response.ok && result.success) {
-          status.innerHTML = `✅ Zil başarıyla çalındı!<br><a href="chat.html?session_id=${result.session_id}">Sohbete geç</a>`;
+          status.innerHTML = `✅ Zil başarıyla çalındı!`;
+
+          // Görüşme seçeneklerini göster
+          document.getElementById('communication-options').classList.remove('hidden');
+
+          const session_id = result.session_id;
+
+          // Chat butonu her zaman aktif (yukarıdan da link verilmişti)
+          document.getElementById('chatBtn').onclick = () => {
+            window.location.href = `chat.html?session_id=${session_id}`;
+          };
+
+          // Owner izinlerini kontrol et
+          fetch('https://npvwenwghmxmrzqbfgbq.supabase.co/functions/v1/check-user-permissions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ session_id })
+          })
+          .then(res => res.json())
+          .then(data => {
+            if (data.allow_voice_call) {
+              const vb = document.getElementById('voiceBtn');
+              vb.classList.remove('hidden');
+              vb.onclick = () => alert("🔊 Sesli görüşme başlatılacak (henüz entegre değil)");
+            }
+
+            if (data.allow_video_call) {
+              const vb = document.getElementById('videoBtn');
+              vb.classList.remove('hidden');
+              vb.onclick = () => alert("🎥 Görüntülü görüşme başlatılacak (henüz entegre değil)");
+            }
+          })
+          .catch(err => {
+            console.error("İzinler alınamadı:", err);
+          });
         } else {
           status.textContent = `❌ Hata: ${result.error || 'Zil çalma başarısız oldu.'}`;
         }
