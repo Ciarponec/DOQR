@@ -61,14 +61,12 @@
     #sendBtn:hover {
       background: #45a049;
     }
-
     .call-buttons {
       display: flex;
       justify-content: center;
       gap: 1em;
       margin-bottom: 1em;
     }
-
     .call-buttons button {
       padding: 0.5em 1em;
       font-size: 1em;
@@ -76,9 +74,9 @@
       border-radius: 6px;
       cursor: pointer;
     }
-
     #voiceCallBtn { background: #2196F3; color: white; display: none; }
     #videoCallBtn { background: #E91E63; color: white; display: none; }
+    #callStatus { margin-top: 1em; font-weight: bold; text-align: center; }
   </style>
 </head>
 <body>
@@ -90,6 +88,7 @@
       <button id="voiceCallBtn">🔊 Sesli Görüşme</button>
       <button id="videoCallBtn">🎥 Görüntülü Görüşme</button>
     </div>
+    <div id="callStatus"></div>
 
     <div id="chatBox"></div>
     <div class="input-row">
@@ -109,11 +108,13 @@
       const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5wdndlbndnaG14bXJ6cWJmZ2JxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgyMDE1NDMsImV4cCI6MjA2Mzc3NzU0M30.feUs88g74qKEZU57LUF8lIobs_DuEjCZs-PQnHxmhtk';
       const API_URL = `${SUPABASE_URL}/functions/v1/send-chat-message`;
       const PERM_URL = `${SUPABASE_URL}/functions/v1/check-user-permissions`;
+      const CALL_URL = `${SUPABASE_URL}/functions/v1/send-call-request`;
 
       const supabase = createClient(SUPABASE_URL, SUPABASE_ANON);
       const chatBox = document.getElementById('chatBox');
       const chatInput = document.getElementById('chatInput');
       const sendBtn = document.getElementById('sendBtn');
+      const callStatus = document.getElementById('callStatus');
 
       const voiceBtn = document.getElementById('voiceCallBtn');
       const videoBtn = document.getElementById('videoCallBtn');
@@ -200,16 +201,36 @@
       .then(data => {
         if (data.allow_voice_call) {
           voiceBtn.style.display = 'inline-block';
-          voiceBtn.onclick = () => alert("🔊 Sesli görüşme başlatılacak (yakında)");
+          voiceBtn.onclick = () => sendCallRequest('voice');
         }
         if (data.allow_video_call) {
           videoBtn.style.display = 'inline-block';
-          videoBtn.onclick = () => alert("🎥 Görüntülü görüşme başlatılacak (yakında)");
+          videoBtn.onclick = () => sendCallRequest('video');
         }
-      })
-      .catch(err => {
-        console.error("İzinler alınamadı:", err);
       });
+
+      async function sendCallRequest(type) {
+        callStatus.textContent = `📞 ${type === 'voice' ? 'Sesli' : 'Görüntülü'} arama başlatılıyor...`;
+
+        try {
+          const response = await fetch(CALL_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ session_id, call_type: type })
+          });
+
+          const result = await response.json();
+
+          if (response.ok && result.success) {
+            callStatus.textContent = `✅ Çağrı gönderildi. Lütfen bekleyin...`;
+          } else {
+            callStatus.textContent = `❌ Hata: ${result.error || 'Çağrı başlatılamadı.'}`;
+          }
+
+        } catch (e) {
+          callStatus.textContent = `❌ Ağ hatası: ${e.message || e}`;
+        }
+      }
     });
   </script>
 </body>
