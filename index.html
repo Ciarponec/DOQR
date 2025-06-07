@@ -14,7 +14,7 @@
     }
     .container { max-width: 400px; margin: auto; }
     .hidden { display: none; }
-    #status, #callStatus { margin-top: 1em; font-weight: bold; }
+    #status { margin-top: 1em; font-weight: bold; }
   </style>
 </head>
 <body>
@@ -32,7 +32,6 @@
       <button id="chatBtn">💬 Yazılı Chat</button>
       <button id="voiceBtn" class="hidden">🔊 Sesli Görüşme</button>
       <button id="videoBtn" class="hidden">🎥 Görüntülü Görüşme</button>
-      <div id="callStatus"></div>
     </div>
   </div>
 
@@ -42,10 +41,10 @@
     async function ringBell() {
       const name = document.getElementById('visitorName').value;
       const message = document.getElementById('visitorMessage').value;
-      const status = document.getElementById('status');
 
       const urlParams = new URLSearchParams(window.location.search);
       const qr_token = urlParams.get('qr');
+      const status = document.getElementById('status');
 
       status.textContent = '⏳ Gönderiliyor...';
 
@@ -75,17 +74,16 @@
         }
 
         if (response.ok && result.success) {
-          sessionId = result.session_id;
           status.innerHTML = `✅ Zil başarıyla çalındı!`;
+          sessionId = result.session_id;
 
+          // Görüşme seçeneklerini göster
           document.getElementById('communication-options').classList.remove('hidden');
 
-          // Chat linki
           document.getElementById('chatBtn').onclick = () => {
             window.location.href = `chat.html?session_id=${sessionId}`;
           };
 
-          // Owner izinlerini kontrol et
           fetch('https://npvwenwghmxmrzqbfgbq.supabase.co/functions/v1/check-user-permissions', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -104,6 +102,9 @@
               vb.classList.remove('hidden');
               vb.onclick = () => sendCallRequest('video');
             }
+          })
+          .catch(err => {
+            console.error("İzinler alınamadı:", err);
           });
         } else {
           status.textContent = `❌ Hata: ${result.error || 'Zil çalma başarısız oldu.'}`;
@@ -114,26 +115,29 @@
     }
 
     async function sendCallRequest(type) {
-      const callStatus = document.getElementById('callStatus');
-      callStatus.textContent = `📞 ${type === 'voice' ? 'Sesli' : 'Görüntülü'} arama başlatılıyor...`;
+      const status = document.getElementById('status');
+      status.textContent = `📞 ${type === 'voice' ? 'Sesli' : 'Görüntülü'} arama başlatılıyor...`;
 
       try {
         const response = await fetch('https://npvwenwghmxmrzqbfgbq.supabase.co/functions/v1/send-call-request', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ session_id: sessionId, call_type: type })
+          body: JSON.stringify({
+            session_id: sessionId,
+            call_type: type
+          })
         });
 
         const result = await response.json();
 
         if (response.ok && result.success) {
-          callStatus.textContent = `✅ Çağrı gönderildi. Lütfen bekleyin...`;
-          // Gelecekte: WebRTC bağlantısı bu noktadan başlatılacak
+          status.textContent = `✅ Çağrı gönderildi. Lütfen bekleyin...`;
         } else {
-          callStatus.textContent = `❌ Hata: ${result.error || 'Çağrı başlatılamadı.'}`;
+          status.textContent = `❌ Hata: ${result.error || 'Çağrı başlatılamadı.'}`;
         }
+
       } catch (e) {
-        callStatus.textContent = `❌ Ağ hatası: ${e.message || e}`;
+        status.textContent = `❌ Ağ hatası: ${e.message || e}`;
       }
     }
   </script>
