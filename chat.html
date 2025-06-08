@@ -79,77 +79,107 @@
   </div>
 
   <script type="module">
-    import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+  import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-    document.addEventListener('DOMContentLoaded', async () => {
-      const urlParams = new URLSearchParams(window.location.search);
-      const session_id = urlParams.get('session_id');
-      console.log("❓ session_id:", session_id);
+  document.addEventListener('DOMContentLoaded', async () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const session_id = urlParams.get('session_id');
+    console.log("🔍 session_id:", session_id);
+    if (!session_id) {
+      console.error("❌ session_id bulunamadı.");
+      return;
+    }
 
+    const SUPABASE_URL = 'https://npvwenwghmxmrzqbfgbq.supabase.co';
+    const SUPABASE_ANON = 'ey...'; // gerçek token ile değiştir
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON);
+    console.log("✅ Supabase istemcisi oluşturuldu.");
 
-      const SUPABASE_URL = 'https://npvwenwghmxmrzqbfgbq.supabase.co';
-      const SUPABASE_ANON = 'ey...'; // gerçek token ile değiştir
+    const chatBox = document.getElementById('chatBox');
+    const chatInput = document.getElementById('chatInput');
+    const sendBtn = document.getElementById('sendBtn');
 
-      const supabase = createClient(SUPABASE_URL, SUPABASE_ANON);
+    function appendMessage(msg) {
+      const div = document.createElement('div');
+      div.className = 'msg' + (msg.sender === 'visitor' ? ' you' : '');
+      div.innerText = msg.text;
+      chatBox.appendChild(div);
+      chatBox.scrollTop = chatBox.scrollHeight;
+      console.log("📩 Yeni mesaj eklendi:", msg);
+    }
 
-      const chatBox = document.getElementById('chatBox');
-      const chatInput = document.getElementById('chatInput');
-      const sendBtn = document.getElementById('sendBtn');
-
-      let peerConnection;
-      let localStream;
-
-      function appendMessage(msg) {
-        const div = document.createElement('div');
-        div.className = 'msg' + (msg.sender === 'visitor' ? ' you' : '');
-        div.innerText = msg.text;
-        chatBox.appendChild(div);
-        chatBox.scrollTop = chatBox.scrollHeight;
-      }
-
-      async function loadMessages() {
-        const { data: messages } = await supabase
+    async function loadMessages() {
+      try {
+        const { data: messages, error } = await supabase
           .from('chat_messages')
           .select('*')
           .eq('session_ref', session_id)
           .order('created_at', { ascending: true });
 
+        if (error) {
+          console.error("❌ Mesajlar yüklenemedi:", error);
+          return;
+        }
+
         chatBox.innerHTML = '';
         messages.forEach(msg => appendMessage(msg));
+        console.log("📚 Geçmiş mesajlar yüklendi:", messages.length);
+      } catch (e) {
+        console.error("❌ loadMessages() hatası:", e);
       }
+    }
 
-      async function sendMessage() {
-        const text = chatInput.value.trim();
-        if (!text) return;
-
-        await supabase.functions.invoke('send-chat-message', {
+    async function sendMessage() {
+      const text = chatInput.value.trim();
+      if (!text) return;
+      try {
+        console.log("📤 Mesaj gönderiliyor:", text);
+        const { data, error } = await supabase.functions.invoke('send-chat-message', {
           body: { session_id, sender: 'visitor', text },
         });
 
-        chatInput.value = '';
+        if (error || !data?.success) {
+          console.error("❌ Mesaj gönderilemedi:", error || data);
+        } else {
+          console.log("✅ Mesaj gönderildi.");
+          chatInput.value = '';
+        }
+      } catch (e) {
+        console.error("❌ sendMessage() hatası:", e);
       }
+    }
 
-      chatInput.addEventListener('keypress', e => {
-        if (e.key === 'Enter') sendMessage();
-      });
-      sendBtn.addEventListener('click', sendMessage);
+    chatInput.addEventListener('keypress', e => {
+      if (e.key === 'Enter') sendMessage();
+    });
+    sendBtn.addEventListener('click', sendMessage);
 
-      supabase.channel(`chat_channel_${session_id}`)
+    try {
+      const channel = supabase.channel(`chat_channel_${session_id}`)
         .on('postgres_changes', {
           event: 'INSERT',
           schema: 'public',
           table: 'chat_messages',
           filter: `session_ref=eq.${session_id}`
         }, payload => {
+          console.log("📥 Realtime mesaj geldi:", payload.new);
           appendMessage(payload.new);
         })
         .subscribe();
 
-      await loadMessages();
-      await startWebRTCAnswer(session_id);
+      console.log("📡 Realtime chat kanalına abone olundu.");
+    } catch (e) {
+      console.error("❌ Kanal abonelik hatası:", e);
+    }
 
-      async function startWebRTCAnswer(sessionId) {
-        const { data: callData } = await supabase
+    await loadMessages();
+    await startWebRTCAnswer(session_id);
+
+    async function startWebRTCAnswer(sessionId) {
+      try {
+        console.log("📞 WebRTC yanıtı başlatılıyor...");
+
+        const { data: callData, error } = await supabase
           .from('calls')
           .select('*')
           .eq('session_id', sessionId)
@@ -157,12 +187,18 @@
           .limit(1)
           .single();
 
-        if (!callData?.sdp_offer) return;
+        if (error || !callData?.sdp_offer) {
+          console.warn("ℹ️ SDP offer yok veya çağrı bulunamadı.");
+          return;
+        }
+
+        console.log("📥 SDP offer alındı:", callData.call_type);
 
         const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
-        peerConnection = new RTCPeerConnection(config);
+        const peerConnection = new RTCPeerConnection(config);
 
         peerConnection.ontrack = (event) => {
+          console.log("📺 Remote video geldi.");
           document.getElementById('remoteVideo').srcObject = event.streams[0];
         };
 
@@ -172,7 +208,7 @@
           }
         };
 
-        localStream = await navigator.mediaDevices.getUserMedia({
+        const localStream = await navigator.mediaDevices.getUserMedia({
           audio: true,
           video: callData.call_type === 'video'
         });
@@ -183,7 +219,7 @@
           document.getElementById('localVideo').srcObject = localStream;
         }
 
-        localStream.getTracks().forEach((track) => {
+        localStream.getTracks().forEach(track => {
           peerConnection.addTrack(track, localStream);
         });
 
@@ -200,9 +236,13 @@
           .update({ sdp_answer: answer.sdp })
           .eq('call_id', callData.call_id);
 
-        console.log('✅ SDP yanıt gönderildi');
+        console.log("✅ SDP yanıt Supabase'e yazıldı.");
+      } catch (e) {
+        console.error("❌ WebRTC setup hatası:", e);
       }
-    });
-  </script>
+    }
+  });
+</script>
+
 </body>
 </html>
