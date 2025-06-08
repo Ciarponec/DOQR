@@ -5,16 +5,24 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>DOQR - Görüşme</title>
   <style>
-    body { font-family: sans-serif; text-align: center; background: #f3f3f3; margin: 0; padding: 2em; }
+    body {
+      font-family: sans-serif;
+      background: #f4f4f4;
+      text-align: center;
+      padding: 2em;
+    }
+    h2 {
+      margin-top: 0;
+    }
     video {
       width: 100%;
-      max-height: 200px;
-      border-radius: 10px;
-      margin-bottom: 1em;
+      max-height: 220px;
+      border-radius: 12px;
+      margin: 1em 0;
       background: black;
     }
     button {
-      padding: 1em 2em;
+      padding: 0.8em 2em;
       font-size: 16px;
       border: none;
       border-radius: 8px;
@@ -34,18 +42,18 @@
   <script type="module">
     import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-    const params = new URLSearchParams(window.location.search);
-    const session_id = params.get('session_id');
-    const call_id = params.get('call_id');
-    const type = params.get('type');
+    const urlParams = new URLSearchParams(window.location.search);
+    const session_id = urlParams.get('session_id');
+    const call_id = urlParams.get('call_id');
+    const type = urlParams.get('type');
 
     const supabase = createClient(
       'https://npvwenwghmxmrzqbfgbq.supabase.co',
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5wdndlbndnaG14bXJ6cWJmZ2JxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgyMDE1NDMsImV4cCI6MjA2Mzc3NzU0M30.feUs88g74qKEZU57LUF8lIobs_DuEjCZs-PQnHxmhtk' // anon key
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5wdndlbndnaG14bXJ6cWJmZ2JxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgyMDE1NDMsImV4cCI6MjA2Mzc3NzU0M30.feUs88g74qKEZU57LUF8lIobs_DuEjCZs-PQnHxmhtk'
     );
 
-    const localVideo = document.getElementById('localVideo');
     const remoteVideo = document.getElementById('remoteVideo');
+    const localVideo = document.getElementById('localVideo');
     const callTitle = document.getElementById('callTitle');
     let pc;
 
@@ -57,42 +65,57 @@
       callTitle.innerText = '🎥 Görüntülü Görüşme';
     }
 
-    async function init() {
-      const { data: call } = await supabase
-        .from('calls')
-        .select('*')
-        .eq('call_id', call_id)
-        .single();
+    async function initCall() {
+      try {
+        const { data: callData, error } = await supabase
+          .from('calls')
+          .select('*')
+          .eq('call_id', call_id)
+          .single();
 
-      if (!call?.sdp_offer) {
-        console.error('Teklif SDP eksik');
-        return;
+        if (error || !callData?.sdp_offer) {
+          console.error("❌ Teklif SDP eksik veya çağrı bulunamadı");
+          return;
+        }
+
+        const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+        pc = new RTCPeerConnection(config);
+
+        pc.ontrack = (event) => {
+          remoteVideo.srcObject = event.streams[0];
+        };
+
+        pc.onicecandidate = (event) => {
+          if (event.candidate) {
+            console.log("📡 Yeni ICE:", event.candidate);
+          }
+        };
+
+        const localStream = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+          video: type === 'video'
+        });
+
+        if (type === 'video') {
+          localVideo.srcObject = localStream;
+        }
+
+        localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+
+        await pc.setRemoteDescription({ type: 'offer', sdp: callData.sdp_offer });
+
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+
+        await supabase
+          .from('calls')
+          .update({ sdp_answer: answer.sdp })
+          .eq('call_id', call_id);
+
+        console.log("✅ SDP yanıt yazıldı.");
+      } catch (e) {
+        console.error("❌ Görüşme başlatılamadı:", e);
       }
-
-      const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
-      pc = new RTCPeerConnection(config);
-
-      pc.ontrack = (e) => {
-        remoteVideo.srcObject = e.streams[0];
-      };
-
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: type === 'video',
-        audio: true
-      });
-
-      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
-      localVideo.srcObject = stream;
-
-      await pc.setRemoteDescription({ type: 'offer', sdp: call.sdp_offer });
-
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-
-      await supabase
-        .from('calls')
-        .update({ sdp_answer: answer.sdp })
-        .eq('call_id', call_id);
     }
 
     function endCall() {
@@ -100,7 +123,7 @@
       window.close();
     }
 
-    init();
+    initCall();
   </script>
 </body>
 </html>
