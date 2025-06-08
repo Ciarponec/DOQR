@@ -5,7 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>DOQR - Canlı Sohbet</title>
   <style>
-    body { font-family: Arial, sans-serif; background: #f4f4f4; margin: 0; padding: 0; }
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f4f4;
+      margin: 0;
+      padding: 0;
+    }
     .chat-container {
       max-width: 600px;
       margin: 20px auto;
@@ -14,9 +19,7 @@
       box-shadow: 0 0 10px rgba(0,0,0,0.1);
       padding: 1em;
     }
-    h2 {
-      margin-top: 0;
-    }
+    h2 { margin-top: 0; }
     #chatBox {
       border: 1px solid #ccc;
       border-radius: 6px;
@@ -61,16 +64,11 @@
       font-weight: bold;
       cursor: pointer;
     }
-    video { width: 100%; max-height: 150px; border-radius: 8px; margin-bottom: 10px; display: none; }
   </style>
 </head>
 <body>
   <div class="chat-container">
     <h2>💬 Canlı Sohbet</h2>
-
-    <video id="remoteVideo" autoplay playsinline></video>
-    <video id="localVideo" autoplay muted playsinline></video>
-
     <div id="chatBox"></div>
     <div class="input-row">
       <input type="text" id="chatInput" placeholder="Mesajınızı yazın...">
@@ -79,21 +77,19 @@
   </div>
 
   <script type="module">
-  import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+    import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-  document.addEventListener('DOMContentLoaded', async () => {
     const urlParams = new URLSearchParams(window.location.search);
     const session_id = urlParams.get('session_id');
-    console.log("🔍 session_id:", session_id);
     if (!session_id) {
       console.error("❌ session_id bulunamadı.");
       return;
     }
 
-    const SUPABASE_URL = 'https://npvwenwghmxmrzqbfgbq.supabase.co';
-    const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5wdndlbndnaG14bXJ6cWJmZ2JxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgyMDE1NDMsImV4cCI6MjA2Mzc3NzU0M30.feUs88g74qKEZU57LUF8lIobs_DuEjCZs-PQnHxmhtk';
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON);
-    console.log("✅ Supabase istemcisi oluşturuldu.");
+    const supabase = createClient(
+      'https://npvwenwghmxmrzqbfgbq.supabase.co',
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5wdndlbndnaG14bXJ6cWJmZ2JxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgyMDE1NDMsImV4cCI6MjA2Mzc3NzU0M30.feUs88g74qKEZU57LUF8lIobs_DuEjCZs-PQnHxmhtk'
+    );
 
     const chatBox = document.getElementById('chatBox');
     const chatInput = document.getElementById('chatInput');
@@ -105,47 +101,35 @@
       div.innerText = msg.text;
       chatBox.appendChild(div);
       chatBox.scrollTop = chatBox.scrollHeight;
-      console.log("📩 Yeni mesaj eklendi:", msg);
     }
 
     async function loadMessages() {
-      try {
-        const { data: messages, error } = await supabase
-          .from('chat_messages')
-          .select('*')
-          .eq('session_ref', session_id)
-          .order('created_at', { ascending: true });
+      const { data: messages, error } = await supabase
+        .from('chat_messages')
+        .select('*')
+        .eq('session_ref', session_id)
+        .order('created_at', { ascending: true });
 
-        if (error) {
-          console.error("❌ Mesajlar yüklenemedi:", error);
-          return;
-        }
-
-        chatBox.innerHTML = '';
-        messages.forEach(msg => appendMessage(msg));
-        console.log("📚 Geçmiş mesajlar yüklendi:", messages.length);
-      } catch (e) {
-        console.error("❌ loadMessages() hatası:", e);
+      if (error) {
+        console.error("❌ Mesajlar yüklenemedi:", error);
+        return;
       }
+
+      chatBox.innerHTML = '';
+      messages.forEach(appendMessage);
     }
 
     async function sendMessage() {
       const text = chatInput.value.trim();
       if (!text) return;
-      try {
-        console.log("📤 Mesaj gönderiliyor:", text);
-        const { data, error } = await supabase.functions.invoke('send-chat-message', {
-          body: { session_id, sender: 'visitor', text },
-        });
+      const { data, error } = await supabase.functions.invoke('send-chat-message', {
+        body: { session_id, sender: 'visitor', text },
+      });
 
-        if (error || !data?.success) {
-          console.error("❌ Mesaj gönderilemedi:", error || data);
-        } else {
-          console.log("✅ Mesaj gönderildi.");
-          chatInput.value = '';
-        }
-      } catch (e) {
-        console.error("❌ sendMessage() hatası:", e);
+      if (error || !data?.success) {
+        console.error("❌ Mesaj gönderilemedi:", error || data);
+      } else {
+        chatInput.value = '';
       }
     }
 
@@ -154,95 +138,17 @@
     });
     sendBtn.addEventListener('click', sendMessage);
 
-    try {
-      const channel = supabase.channel(`chat_channel_${session_id}`)
-        .on('postgres_changes', {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'chat_messages',
-          filter: `session_ref=eq.${session_id}`
-        }, payload => {
-          console.log("📥 Realtime mesaj geldi:", payload.new);
-          appendMessage(payload.new);
-        })
-        .subscribe();
+    supabase
+      .channel(`chat_channel_${session_id}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'chat_messages',
+        filter: `session_ref=eq.${session_id}`
+      }, payload => appendMessage(payload.new))
+      .subscribe();
 
-      console.log("📡 Realtime chat kanalına abone olundu.");
-    } catch (e) {
-      console.error("❌ Kanal abonelik hatası:", e);
-    }
-
-    await loadMessages();
-    await startWebRTCAnswer(session_id);
-
-    async function startWebRTCAnswer(sessionId) {
-      try {
-        console.log("📞 WebRTC yanıtı başlatılıyor...");
-
-        const { data: callData, error } = await supabase
-          .from('calls')
-          .select('*')
-          .eq('session_id', sessionId)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .single();
-
-        if (error || !callData?.sdp_offer) {
-          console.warn("ℹ️ SDP offer yok veya çağrı bulunamadı.");
-          return;
-        }
-
-        console.log("📥 SDP offer alındı:", callData.call_type);
-
-        const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
-        const peerConnection = new RTCPeerConnection(config);
-
-        peerConnection.ontrack = (event) => {
-          console.log("📺 Remote video geldi.");
-          document.getElementById('remoteVideo').srcObject = event.streams[0];
-        };
-
-        peerConnection.onicecandidate = (event) => {
-          if (event.candidate) {
-            console.log('📡 ICE (web):', event.candidate);
-          }
-        };
-
-        const localStream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-          video: callData.call_type === 'video'
-        });
-
-        if (callData.call_type === 'video') {
-          document.getElementById('remoteVideo').style.display = 'block';
-          document.getElementById('localVideo').style.display = 'block';
-          document.getElementById('localVideo').srcObject = localStream;
-        }
-
-        localStream.getTracks().forEach(track => {
-          peerConnection.addTrack(track, localStream);
-        });
-
-        await peerConnection.setRemoteDescription({
-          type: 'offer',
-          sdp: callData.sdp_offer
-        });
-
-        const answer = await peerConnection.createAnswer();
-        await peerConnection.setLocalDescription(answer);
-
-        await supabase
-          .from('calls')
-          .update({ sdp_answer: answer.sdp })
-          .eq('call_id', callData.call_id);
-
-        console.log("✅ SDP yanıt Supabase'e yazıldı.");
-      } catch (e) {
-        console.error("❌ WebRTC setup hatası:", e);
-      }
-    }
-  });
-</script>
-
+    loadMessages();
+  </script>
 </body>
 </html>
