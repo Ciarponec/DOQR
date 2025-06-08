@@ -84,6 +84,8 @@
     document.addEventListener('DOMContentLoaded', async () => {
       const urlParams = new URLSearchParams(window.location.search);
       const session_id = urlParams.get('session_id');
+      console.log("❓ session_id:", session_id);
+
 
       const SUPABASE_URL = 'https://npvwenwghmxmrzqbfgbq.supabase.co';
       const SUPABASE_ANON = 'ey...'; // gerçek token ile değiştir
