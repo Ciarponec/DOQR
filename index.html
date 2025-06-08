@@ -102,12 +102,34 @@
         const result = await res.json();
         if (res.ok && result.success) {
           status.textContent = '✅ Çağrı gönderildi. Lütfen bekleyin...';
+          // ICE sürecini başlat
+          startIceCandidateListener(result.call_id);
           window.location.href = `call.html?session_id=${sessionId}&call_id=${result.call_id}&type=${type}`;
         } else {
           status.textContent = `❌ ${result.error||'Çağrı başarısız.'}`;
         }
       } catch(e) {
         status.textContent = `❌ Ağ hatası: ${e.message||e}`;
+      }
+    }
+
+    async function startIceCandidateListener(callId) {
+      const supabase = window.createClient && window.createClient();
+      if (!supabase || !callId) return;
+
+      try {
+        supabase.channel(`ice_channel_${callId}`)
+          .on('postgres_changes', {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'calls_ice',
+            filter: `call_ref=eq.${callId}`
+          }, (payload) => {
+            console.log('📥 ICE adayı geldi:', payload);
+          })
+          .subscribe();
+      } catch (e) {
+        console.error('❌ ICE listener başlatılamadı:', e);
       }
     }
   </script>
