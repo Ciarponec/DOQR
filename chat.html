@@ -1,3 +1,5 @@
+[UPDATED] chat.html
+
 <!DOCTYPE html>
 <html lang="tr">
 <head>
@@ -41,20 +43,31 @@
 
     const supabase = createClient(
       'https://npvwenwghmxmrzqbfgbq.supabase.co',
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5wdndlbndnaG14bXJ6cWJmZ2JxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgyMDE1NDMsImV4cCI6MjA2Mzc3NzU0M30.feUs88g74qKEZU57LUF8lIobs_DuEjCZs-PQnHxmhtk' // anon key
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5wdndlbndnaG14bXJ6cWJmZ2JxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgyMDE1NDMsImV4cCI6MjA2Mzc3NzU0M30.feUs88g74qKEZU57LUF8lIobs_DuEjCZs-PQnHxmhtk'
     );
 
     const messagesDiv = document.getElementById('messages');
     const input = document.getElementById('messageInput');
 
     async function loadMessages() {
-      const { data } = await supabase
+      if (!session_id) {
+        console.warn("⚠️ session_id yok, mesajlar yüklenemez.");
+        return;
+      }
+      console.log("📥 Mesajlar yükleniyor, session_id:", session_id);
+      const { data, error } = await supabase
         .from('chat_messages')
         .select('*')
         .eq('session_ref', session_id)
         .order('created_at', { ascending: true });
+
+      if (error) {
+        console.error("❌ Mesaj sorgusu hatası:", error);
+        return;
+      }
+
       messagesDiv.innerHTML = '';
-      data.forEach(m => {
+      (data || []).forEach(m => {
         const div = document.createElement('div');
         div.className = 'message';
         div.textContent = `${m.sender === 'visitor' ? 'Ziyaretçi' : 'Ev sahibi'}: ${m.text}`;
@@ -65,13 +78,26 @@
     async function sendMessage() {
       const text = input.value.trim();
       if (!text) return;
-      await supabase.from('chat_messages').insert({
+      if (!session_id) {
+        alert("❌ session_id yok, mesaj gönderilemez.");
+        return;
+      }
+
+      console.log("📤 Mesaj gönderiliyor:", text);
+      const { error } = await supabase.from('chat_messages').insert({
         session_ref: session_id,
         sender: 'visitor',
         text
       });
+
+      if (error) {
+        console.error("❌ Mesaj gönderilemedi:", error);
+        alert("Mesaj gönderilemedi.");
+        return;
+      }
+
       input.value = '';
-      loadMessages();
+      await loadMessages();
     }
 
     loadMessages();
