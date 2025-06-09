@@ -1,15 +1,13 @@
-[UPDATED] caller.html (eşleştirilmiş)
-
 <!DOCTYPE html>
 <html lang="tr">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DOQR - Arayan</title>
+  <title>DOQR - Çağrı Başlat</title>
   <style>
-    body { font-family: sans-serif; text-align: center; background: #f9f9f9; padding: 2em; }
+    body { font-family: sans-serif; text-align: center; background: #f0f0f0; padding: 2em; }
     video { width: 100%; max-height: 200px; margin-bottom: 1em; border-radius: 12px; background: black; }
-    button { padding: 1em 2em; font-size: 16px; border-radius: 8px; border: none; background: #e53935; color: white; }
+    button { padding: 1em 2em; font-size: 16px; border-radius: 8px; border: none; background: #1976d2; color: white; }
   </style>
 </head>
 <body>
@@ -71,30 +69,6 @@
       }, 1000);
     }
 
-    async function waitForAnswer(retries = 30) {
-      for (let i = 0; i < retries; i++) {
-        const { data: call } = await supabase
-          .from('calls')
-          .select('sdp_answer')
-          .eq('call_id', call_id)
-          .single();
-
-        if (call?.sdp_answer) {
-          await pc.setRemoteDescription({
-            type: 'answer',
-            sdp: call.sdp_answer
-          });
-          console.log('✅ SDP answer alındı ve bağlantı tamamlandı.');
-          return;
-        }
-
-        console.log('⏳ SDP answer bekleniyor...');
-        await new Promise(resolve => setTimeout(resolve, 2000));
-      }
-
-      alert('⚠️ Karşı taraf cevap vermedi.');
-    }
-
     async function init() {
       const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
       pc = new RTCPeerConnection(config);
@@ -115,10 +89,17 @@
         remoteVideo.srcObject = e.streams[0];
       };
 
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: type === 'video',
-        audio: true
-      });
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: type === 'video',
+          audio: true
+        });
+      } catch (e) {
+        console.error("🎥 Kamera/Mikrofon hatası:", e);
+        callTitle.innerText = "🎥 Cihaz erişimi başarısız.";
+        return;
+      }
 
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
       localVideo.srcObject = stream;
@@ -126,12 +107,29 @@
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
-      await supabase
-        .from('calls')
-        .update({ sdp_offer: offer.sdp })
-        .eq('call_id', call_id);
+      await supabase.from('calls').update({ sdp_offer: offer.sdp }).eq('call_id', call_id);
 
-      waitForAnswer();
+      let attempt = 0;
+      const maxAttempts = 15;
+      const interval = setInterval(async () => {
+        const { data, error } = await supabase
+          .from('calls')
+          .select('sdp_answer')
+          .eq('call_id', call_id)
+          .single();
+
+        if (data?.sdp_answer) {
+          clearInterval(interval);
+          await pc.setRemoteDescription({ type: 'answer', sdp: data.sdp_answer });
+        } else {
+          attempt++;
+          if (attempt >= maxAttempts) {
+            clearInterval(interval);
+            callTitle.innerText = "⚠️ SDP yanıtı alınamadı.";
+          }
+        }
+      }, 2000);
+
       pollIceCandidates('callee');
     }
 
