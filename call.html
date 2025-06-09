@@ -1,10 +1,4 @@
-[UPDATED] caller.html ve call.html birleştirilmiş
-
-<!-- Bu dosyada hem caller.html hem call.html güncellemeleri yer almaktadır -->
-
-<!-- Yukarıda caller.html kodu yer almaktadır -->
-
-<!-- Aşağıda call.html kodu başlıyor -->
+[UPDATED] call.html
 
 <!DOCTYPE html>
 <html lang="tr">
@@ -86,6 +80,32 @@
       throw new Error("❌ SDP offer zaman aşımı.");
     }
 
+    async function pollIceCandidates(fromWho) {
+      let seen = new Set();
+      setInterval(async () => {
+        const { data: candidates } = await supabase
+          .from('calls_ice')
+          .select('*')
+          .eq('call_ref', call_id)
+          .eq('sender', fromWho);
+
+        for (const c of candidates) {
+          const key = c.candidate + c.sdp_mid + c.sdp_mline_index;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          try {
+            await pc.addIceCandidate({
+              candidate: c.candidate,
+              sdpMid: c.sdp_mid,
+              sdpMLineIndex: c.sdp_mline_index
+            });
+          } catch (e) {
+            console.error("ICE eklenemedi:", e);
+          }
+        }
+      }, 1000);
+    }
+
     async function init() {
       try {
         console.log("🚀 SDP başlatılıyor...");
@@ -144,32 +164,6 @@
         console.error("🔥 Hata oluştu:", err);
         alert("Bağlantı kurulamadı: " + (err.message || err));
       }
-    }
-
-    async function pollIceCandidates(fromWho) {
-      let seen = new Set();
-      setInterval(async () => {
-        const { data: candidates } = await supabase
-          .from('calls_ice')
-          .select('*')
-          .eq('call_ref', call_id)
-          .eq('sender', fromWho);
-
-        for (const c of candidates) {
-          const key = c.candidate + c.sdp_mid + c.sdp_mline_index;
-          if (seen.has(key)) continue;
-          seen.add(key);
-          try {
-            await pc.addIceCandidate({
-              candidate: c.candidate,
-              sdpMid: c.sdp_mid,
-              sdpMLineIndex: c.sdp_mline_index
-            });
-          } catch (e) {
-            console.error("ICE eklenemedi:", e);
-          }
-        }
-      }, 1000);
     }
 
     function endCall() {
