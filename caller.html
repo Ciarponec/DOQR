@@ -1,3 +1,5 @@
+[UPDATED] caller.html
+
 <!DOCTYPE html>
 <html lang="tr">
 <head>
@@ -27,7 +29,7 @@
 
     const supabase = createClient(
       'https://npvwenwghmxmrzqbfgbq.supabase.co',
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5wdndlbndnaG14bXJ6cWJmZ2JxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgyMDE1NDMsImV4cCI6MjA2Mzc3NzU0M30.feUs88g74qKEZU57LUF8lIobs_DuEjCZs-PQnHxmhtk' // anon key
+      '<ANON_KEY>'
     );
 
     const localVideo = document.getElementById('localVideo');
@@ -81,9 +83,10 @@
         .eq('call_id', call_id);
 
       waitForAnswer();
+      pollIceCandidates('callee');
     }
 
-    async function waitForAnswer(retries = 10) {
+    async function waitForAnswer(retries = 30) {
       for (let i = 0; i < retries; i++) {
         const { data: call } = await supabase
           .from('calls')
@@ -101,10 +104,36 @@
         }
 
         console.log('⏳ SDP answer bekleniyor...');
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 2000));
       }
 
       alert('⚠️ Karşı taraf cevap vermedi.');
+    }
+
+    async function pollIceCandidates(fromWho) {
+      let seen = new Set();
+      setInterval(async () => {
+        const { data: candidates } = await supabase
+          .from('calls_ice')
+          .select('*')
+          .eq('call_ref', call_id)
+          .eq('sender', fromWho);
+
+        for (const c of candidates) {
+          const key = c.candidate + c.sdp_mid + c.sdp_mline_index;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          try {
+            await pc.addIceCandidate({
+              candidate: c.candidate,
+              sdpMid: c.sdp_mid,
+              sdpMLineIndex: c.sdp_mline_index
+            });
+          } catch (e) {
+            console.error("ICE eklenemedi:", e);
+          }
+        }
+      }, 1000);
     }
 
     function endCall() {
@@ -113,7 +142,7 @@
       window.close();
     }
 
-    init();
+    window.addEventListener("DOMContentLoaded", init);
   </script>
 </body>
 </html>
