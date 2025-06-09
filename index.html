@@ -49,63 +49,75 @@
       status.textContent = '⏳ Gönderiliyor...';
       if (!qr_token) return status.textContent = '❌ QR token eksik!';
 
-      const payload = { qr_token, visitor_name: name||null, visitor_message: message||null };
+      const payload = { qr_token, visitor_name: name || null, visitor_message: message || null };
       try {
         const res = await fetch('https://npvwenwghmxmrzqbfgbq.supabase.co/functions/v1/block-check-enabled-ring', {
-          method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
         });
         const result = await res.json();
         if (!res.ok || !result.success) {
-          return status.textContent = `❌ ${result.error||'Zil çalma başarısız.'}`;
+          return status.textContent = `❌ ${result.error || 'Zil çalma başarısız.'}`;
         }
         sessionId = result.session_id;
-        // AppState'e yaz (eğer FFAppState mevcutsa)
         if (typeof FFAppState !== 'undefined' && FFAppState().hasOwnProperty('sessionId')) {
           FFAppState().sessionId = sessionId;
           console.log('📦 AppState.sessionId set edildi:', sessionId);
         }
         console.log('🆔 sessionId:', sessionId);
         status.innerHTML = '✅ Zil başarıyla çalındı!';
-        // show options
-        const opts = document.getElementById('communication-options');
-        opts.classList.remove('hidden');
-        // chat
+        document.getElementById('communication-options').classList.remove('hidden');
+
+        // Chat yönlendirmesi
         document.getElementById('chatBtn').onclick = () => {
           window.location.href = `chat.html?session_id=${sessionId}`;
         };
-        // check permissions
+
+        // İzin kontrolü
         fetch('https://npvwenwghmxmrzqbfgbq.supabase.co/functions/v1/check-user-permissions', {
-          method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({session_id: sessionId})
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: sessionId })
         })
-        .then(r=> r.json()).then(data=>{
+        .then(r => r.json()).then(data => {
           console.log('🔐 permissions:', data);
           if (data.allow_voice_call) {
             const v = document.getElementById('voiceBtn');
-            v.classList.remove('hidden'); v.onclick=() => sendCallRequest('voice');
+            v.classList.remove('hidden');
+            v.onclick = () => sendCallRequest('voice');
           }
           if (data.allow_video_call) {
             const v = document.getElementById('videoBtn');
-            v.classList.remove('hidden'); v.onclick=() => sendCallRequest('video');
+            v.classList.remove('hidden');
+            v.onclick = () => sendCallRequest('video');
           }
-        }).catch(e=> console.error('İzinler alınamadı:', e));
+        }).catch(e => console.error('İzinler alınamadı:', e));
 
-      } catch(e) {
-        status.textContent = `❌ Ağ hatası: ${e.message||e}`;
+      } catch (e) {
+        status.textContent = `❌ Ağ hatası: ${e.message || e}`;
       }
     }
 
     async function sendCallRequest(type) {
       const status = document.getElementById('status');
-      status.textContent = `📞 ${type==='voice'?'Sesli':'Görüntülü'} arama başlatılıyor...`;
+      status.textContent = `📞 ${type === 'voice' ? 'Sesli' : 'Görüntülü'} arama başlatılıyor...`;
       try {
         const res = await fetch('https://npvwenwghmxmrzqbfgbq.supabase.co/functions/v1/send-call-request', {
-          method:'POST', headers:{'Content-Type':'application/json'},
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ session_id: sessionId, call_type: type })
         });
         const result = await res.json();
-        status.textContent = res.ok && result.success ? '✅ Çağrı gönderildi. Lütfen bekleyin...' : `❌ ${result.error||'Çağrı başarısız.'}`;
-      } catch(e) {
-        status.textContent = `❌ Ağ hatası: ${e.message||e}`;
+        if (res.ok && result.success) {
+          status.textContent = '✅ Çağrı gönderildi. Lütfen bekleyin...';
+          const callId = result.call_id;
+          window.location.href = `caller.html?session_id=${sessionId}&call_id=${callId}&type=${type}`;
+        } else {
+          status.textContent = `❌ ${result.error || 'Çağrı başarısız.'}`;
+        }
+      } catch (e) {
+        status.textContent = `❌ Ağ hatası: ${e.message || e}`;
       }
     }
   </script>
