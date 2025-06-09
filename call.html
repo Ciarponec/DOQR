@@ -39,14 +39,15 @@
     const call_id = params.get('call_id');
     const type = params.get('type');
 
-    // AppState'ten session_id almayı dene
     if (!session_id && typeof FFAppState !== 'undefined' && FFAppState().sessionId) {
       session_id = FFAppState().sessionId;
+    } else if (typeof FFAppState !== 'undefined') {
+      FFAppState().sessionId = session_id;
     }
 
     const supabase = createClient(
       'https://npvwenwghmxmrzqbfgbq.supabase.co',
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5wdndlbndnaG14bXJ6cWJmZ2JxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgyMDE1NDMsImV4cCI6MjA2Mzc3NzU0M30.feUs88g74qKEZU57LUF8lIobs_DuEjCZs-PQnHxmhtk' // anon key
+      'ey...' // anon key
     );
 
     const localVideo = document.getElementById('localVideo');
@@ -62,17 +63,22 @@
       callTitle.innerText = '🎥 Görüntülü Görüşme';
     }
 
-    async function init() {
-      const { data: call } = await supabase
-        .from('calls')
-        .select('*')
-        .eq('call_id', call_id)
-        .single();
-
-      if (!call?.sdp_offer) {
-        console.error('Teklif SDP eksik');
-        return;
+    async function waitForSDPOffer(call_id, retries = 5) {
+      for (let i = 0; i < retries; i++) {
+        const { data: call } = await supabase
+          .from('calls')
+          .select('*')
+          .eq('call_id', call_id)
+          .single();
+        if (call?.sdp_offer) return call;
+        console.log("⏳ SDP offer bekleniyor...");
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
+      throw new Error("❌ SDP offer zaman aşımı.");
+    }
+
+    async function init() {
+      const call = await waitForSDPOffer(call_id);
 
       const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
       pc = new RTCPeerConnection(config);
@@ -87,7 +93,8 @@
             call_ref: call_id,
             candidate: event.candidate.candidate,
             sdp_mid: event.candidate.sdpMid,
-            sdp_mline_index: event.candidate.sdpMLineIndex
+            sdp_mline_index: event.candidate.sdpMLineIndex,
+            sender: 'callee'
           });
         }
       };
