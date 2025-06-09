@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DOQR - Arama Başlat</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; background: #f3f3f3; margin: 0; padding: 2em; }
+    video {
+      width: 100%;
+      max-height: 200px;
+      border-radius: 10px;
+      margin-bottom: 1em;
+      background: black;
+    }
+    button {
+      padding: 1em 2em;
+      font-size: 16px;
+      border: none;
+      border-radius: 8px;
+      background-color: #e53935;
+      color: white;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h2 id="callTitle">🔔 Arama Başlatılıyor...</h2>
+  <video id="localVideo" autoplay playsinline muted></video>
+  <br />
+  <button onclick="endCall()">Görüşmeyi Bitir</button>
+
+  <script type="module">
+    import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+    const params = new URLSearchParams(window.location.search);
+    let session_id = params.get('session_id');
+    const call_id = params.get('call_id');
+    const type = params.get('type');
+
+    const supabase = createClient(
+      'https://npvwenwghmxmrzqbfgbq.supabase.co',
+      'ey...' // anon key
+    );
+
+    const localVideo = document.getElementById('localVideo');
+    const callTitle = document.getElementById('callTitle');
+    let pc;
+
+    if (type === 'voice') {
+      localVideo.style.display = 'none';
+      callTitle.innerText = '🔊 Sesli Görüşme Başlatılıyor';
+    } else {
+      callTitle.innerText = '🎥 Görüntülü Görüşme Başlatılıyor';
+    }
+
+    async function init() {
+      const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+      pc = new RTCPeerConnection(config);
+
+      pc.onicecandidate = async (event) => {
+        if (event.candidate) {
+          await supabase.from('calls_ice').insert({
+            call_ref: call_id,
+            candidate: event.candidate.candidate,
+            sdp_mid: event.candidate.sdpMid,
+            sdp_mline_index: event.candidate.sdpMLineIndex,
+            sender: 'caller'
+          });
+        }
+      };
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: type === 'video',
+        audio: true
+      });
+
+      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+      localVideo.srcObject = stream;
+
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      await supabase
+        .from('calls')
+        .update({ sdp_offer: offer.sdp })
+        .eq('call_id', call_id);
+    }
+
+    function endCall() {
+      pc?.getSenders().forEach(s => s.track?.stop());
+      pc?.close();
+      window.close();
+    }
+
+    init();
+  </script>
+</body>
+</html>
