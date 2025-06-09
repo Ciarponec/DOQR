@@ -59,16 +59,21 @@
           return status.textContent = `❌ ${result.error||'Zil çalma başarısız.'}`;
         }
         sessionId = result.session_id;
+        // AppState'e yaz (eğer FFAppState mevcutsa)
+        if (typeof FFAppState !== 'undefined' && FFAppState().hasOwnProperty('sessionId')) {
+          FFAppState().sessionId = sessionId;
+          console.log('📦 AppState.sessionId set edildi:', sessionId);
+        }
         console.log('🆔 sessionId:', sessionId);
         status.innerHTML = '✅ Zil başarıyla çalındı!';
-
+        // show options
         const opts = document.getElementById('communication-options');
         opts.classList.remove('hidden');
-
+        // chat
         document.getElementById('chatBtn').onclick = () => {
           window.location.href = `chat.html?session_id=${sessionId}`;
         };
-
+        // check permissions
         fetch('https://npvwenwghmxmrzqbfgbq.supabase.co/functions/v1/check-user-permissions', {
           method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({session_id: sessionId})
         })
@@ -76,13 +81,11 @@
           console.log('🔐 permissions:', data);
           if (data.allow_voice_call) {
             const v = document.getElementById('voiceBtn');
-            v.classList.remove('hidden');
-            v.onclick = () => sendCallRequest('voice');
+            v.classList.remove('hidden'); v.onclick=() => sendCallRequest('voice');
           }
           if (data.allow_video_call) {
             const v = document.getElementById('videoBtn');
-            v.classList.remove('hidden');
-            v.onclick = () => sendCallRequest('video');
+            v.classList.remove('hidden'); v.onclick=() => sendCallRequest('video');
           }
         }).catch(e=> console.error('İzinler alınamadı:', e));
 
@@ -100,36 +103,9 @@
           body: JSON.stringify({ session_id: sessionId, call_type: type })
         });
         const result = await res.json();
-        if (res.ok && result.success) {
-          status.textContent = '✅ Çağrı gönderildi. Lütfen bekleyin...';
-          // ICE sürecini başlat
-          startIceCandidateListener(result.call_id);
-          window.location.href = `call.html?session_id=${sessionId}&call_id=${result.call_id}&type=${type}`;
-        } else {
-          status.textContent = `❌ ${result.error||'Çağrı başarısız.'}`;
-        }
+        status.textContent = res.ok && result.success ? '✅ Çağrı gönderildi. Lütfen bekleyin...' : `❌ ${result.error||'Çağrı başarısız.'}`;
       } catch(e) {
         status.textContent = `❌ Ağ hatası: ${e.message||e}`;
-      }
-    }
-
-    async function startIceCandidateListener(callId) {
-      const supabase = window.createClient && window.createClient();
-      if (!supabase || !callId) return;
-
-      try {
-        supabase.channel(`ice_channel_${callId}`)
-          .on('postgres_changes', {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'calls_ice',
-            filter: `call_ref=eq.${callId}`
-          }, (payload) => {
-            console.log('📥 ICE adayı geldi:', payload);
-          })
-          .subscribe();
-      } catch (e) {
-        console.error('❌ ICE listener başlatılamadı:', e);
       }
     }
   </script>
