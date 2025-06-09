@@ -47,7 +47,7 @@
 
     const supabase = createClient(
       'https://npvwenwghmxmrzqbfgbq.supabase.co',
-      'ey...' // anon key
+      'ey...' // anon key (gerekirse değiştir)
     );
 
     const localVideo = document.getElementById('localVideo');
@@ -63,13 +63,14 @@
       callTitle.innerText = '🎥 Görüntülü Görüşme';
     }
 
-    async function waitForSDPOffer(call_id, retries = 5) {
+    async function waitForSDPOffer(call_id, retries = 10) {
       for (let i = 0; i < retries; i++) {
-        const { data: call } = await supabase
+        const { data: call, error } = await supabase
           .from('calls')
           .select('*')
           .eq('call_id', call_id)
           .single();
+        if (error) console.error("❌ SDP sorgu hatası:", error);
         if (call?.sdp_offer) return call;
         console.log("⏳ SDP offer bekleniyor...");
         await new Promise(resolve => setTimeout(resolve, 1000));
@@ -78,47 +79,65 @@
     }
 
     async function init() {
-      const call = await waitForSDPOffer(call_id);
+      try {
+        console.log("🚀 SDP başlatılıyor...");
+        const call = await waitForSDPOffer(call_id);
+        console.log("✅ SDP offer alındı:", call.sdp_offer);
 
-      const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
-      pc = new RTCPeerConnection(config);
+        const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+        pc = new RTCPeerConnection(config);
 
-      pc.ontrack = (e) => {
-        remoteVideo.srcObject = e.streams[0];
-      };
+        pc.ontrack = (e) => {
+          console.log("🎥 Remote track alındı.");
+          remoteVideo.srcObject = e.streams[0];
+        };
 
-      pc.onicecandidate = async (event) => {
-        if (event.candidate) {
-          await supabase.from('calls_ice').insert({
-            call_ref: call_id,
-            candidate: event.candidate.candidate,
-            sdp_mid: event.candidate.sdpMid,
-            sdp_mline_index: event.candidate.sdpMLineIndex,
-            sender: 'callee'
-          });
-        }
-      };
+        pc.onicecandidate = async (event) => {
+          if (event.candidate) {
+            console.log("🧊 ICE candidate gönderiliyor...");
+            const { error } = await supabase.from('calls_ice').insert({
+              call_ref: call_id,
+              candidate: event.candidate.candidate,
+              sdp_mid: event.candidate.sdpMid,
+              sdp_mline_index: event.candidate.sdpMLineIndex,
+              sender: 'callee'
+            });
+            if (error) console.error("❌ ICE insert hatası:", error);
+            else console.log("✅ ICE candidate kaydedildi.");
+          }
+        };
 
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: type === 'video',
-        audio: true
-      });
+        console.log("📷 Kamera ve mikrofon erişimi isteniyor...");
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: type === 'video',
+          audio: true
+        });
+        console.log("✅ Erişim başarılı.");
+        stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+        localVideo.srcObject = stream;
 
-      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
-      localVideo.srcObject = stream;
+        console.log("📡 SDP offer remote olarak ayarlanıyor...");
+        await pc.setRemoteDescription({ type: 'offer', sdp: call.sdp_offer });
 
-      await pc.setRemoteDescription({ type: 'offer', sdp: call.sdp_offer });
+        console.log("📝 SDP answer oluşturuluyor...");
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
 
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-
-      await supabase
-        .from('calls')
-        .update({ sdp_answer: answer.sdp })
-        .eq('call_id', call_id);
+        console.log("📤 SDP answer Supabase'e gönderiliyor...");
+        const { error } = await supabase
+          .from('calls')
+          .update({ sdp_answer: answer.sdp })
+          .eq('call_id', call_id);
+        if (error) console.error("❌ SDP update hatası:", error);
+        else console.log("✅ SDP answer başarıyla kaydedildi.");
+      } catch (err) {
+        console.error("🔥 Hata oluştu:", err);
+        alert("Bağlantı kurulamadı: " + (err.message || err));
+      }
     }
 
     function endCall() {
+      console.log("📴 Görüşme sonlandırılıyor.");
       pc?.getSenders().forEach(s => s.track?.stop());
       pc?.close();
       window.close();
