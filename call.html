@@ -99,11 +99,18 @@
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
       localVideo.srcObject = stream;
 
-      const { data: call } = await supabase
-        .from('calls')
-        .select('sdp_offer')
-        .eq('call_id', call_id)
-        .single();
+const { data: call, error } = await supabase
+  .from('calls')
+  .select('sdp_offer')
+  .eq('call_id', call_id)
+  .single();
+
+if (error || !call?.sdp_offer) {
+  console.error("❌ SDP offer alınamadı:", error);
+  callTitle.innerText = "❌ SDP verisi alınamadı.";
+  return;
+}
+
 
       await pc.setRemoteDescription({
         type: 'offer',
