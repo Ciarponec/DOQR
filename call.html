@@ -35,13 +35,18 @@
     import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
     const params = new URLSearchParams(window.location.search);
-    const session_id = params.get('session_id');
+    let session_id = params.get('session_id');
     const call_id = params.get('call_id');
     const type = params.get('type');
 
+    // AppState'ten session_id almayı dene
+    if (!session_id && typeof FFAppState !== 'undefined' && FFAppState().sessionId) {
+      session_id = FFAppState().sessionId;
+    }
+
     const supabase = createClient(
       'https://npvwenwghmxmrzqbfgbq.supabase.co',
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5wdndlbndnaG14bXJ6cWJmZ2JxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgyMDE1NDMsImV4cCI6MjA2Mzc3NzU0M30.feUs88g74qKEZU57LUF8lIobs_DuEjCZs-PQnHxmhtk' // anon key
+      'ey...' // anon key
     );
 
     const localVideo = document.getElementById('localVideo');
@@ -54,7 +59,7 @@
       localVideo.style.display = 'none';
       callTitle.innerText = '🔊 Sesli Görüşme';
     } else {
-      callTitle.innerText = '📹 Görüntülü Görüşme';
+      callTitle.innerText = '🎥 Görüntülü Görüşme';
     }
 
     async function init() {
@@ -82,8 +87,7 @@
             call_ref: call_id,
             candidate: event.candidate.candidate,
             sdp_mid: event.candidate.sdpMid,
-            sdp_mline_index: event.candidate.sdpMLineIndex,
-            sender: 'callee'
+            sdp_mline_index: event.candidate.sdpMLineIndex
           });
         }
       };
@@ -105,37 +109,6 @@
         .from('calls')
         .update({ sdp_answer: answer.sdp })
         .eq('call_id', call_id);
-
-      startIceCandidateListener();
-    }
-
-    async function startIceCandidateListener() {
-      try {
-        supabase.channel(`ice_channel_${call_id}`)
-          .on('postgres_changes', {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'calls_ice',
-            filter: `call_ref=eq.${call_id}`
-          }, async payload => {
-            const ice = payload.new;
-            if (ice.sender === 'caller') {
-              try {
-                await pc.addIceCandidate({
-                  candidate: ice.candidate,
-                  sdpMid: ice.sdp_mid,
-                  sdpMLineIndex: ice.sdp_mline_index
-                });
-                console.log('✅ ICE adayı eklendi:', ice);
-              } catch (e) {
-                console.error('❌ ICE eklenemedi:', e);
-              }
-            }
-          })
-          .subscribe();
-      } catch (e) {
-        console.error('❌ ICE listener hatası:', e);
-      }
     }
 
     function endCall() {
