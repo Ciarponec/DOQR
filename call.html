@@ -1,20 +1,33 @@
-
 <!DOCTYPE html>
 <html lang="tr">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DOQR - Çağrı Yanıt</title>
+  <title>DOQR - Görüşme</title>
   <style>
-    body { font-family: sans-serif; text-align: center; background: #f9f9f9; padding: 2em; }
-    video { width: 100%; max-height: 200px; margin-bottom: 1em; border-radius: 12px; background: black; }
-    button { padding: 1em 2em; font-size: 16px; border-radius: 8px; border: none; background: #e53935; color: white; }
+    body { font-family: sans-serif; text-align: center; background: #f3f3f3; margin: 0; padding: 2em; }
+    video {
+      width: 100%;
+      max-height: 200px;
+      border-radius: 10px;
+      margin-bottom: 1em;
+      background: black;
+    }
+    button {
+      padding: 1em 2em;
+      font-size: 16px;
+      border: none;
+      border-radius: 8px;
+      background-color: #e53935;
+      color: white;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
-  <h2 id="callTitle">📞 Çağrı Yanıtlanıyor...</h2>
-  <video id="localVideo" autoplay muted playsinline></video>
+  <h2 id="callTitle">🔔 Görüşme</h2>
   <video id="remoteVideo" autoplay playsinline></video>
+  <video id="localVideo" autoplay playsinline muted></video>
   <br />
   <button onclick="endCall()">Görüşmeyi Bitir</button>
 
@@ -22,13 +35,19 @@
     import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
     const params = new URLSearchParams(window.location.search);
-    const session_id = params.get('session_id');
+    let session_id = params.get('session_id');
     const call_id = params.get('call_id');
     const type = params.get('type');
 
+    if (!session_id && typeof FFAppState !== 'undefined' && FFAppState().sessionId) {
+      session_id = FFAppState().sessionId;
+    } else if (typeof FFAppState !== 'undefined') {
+      FFAppState().sessionId = session_id;
+    }
+
     const supabase = createClient(
       'https://npvwenwghmxmrzqbfgbq.supabase.co',
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5wdndlbndnaG14bXJ6cWJmZ2JxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgyMDE1NDMsImV4cCI6MjA2Mzc3NzU0M30.feUs88g74qKEZU57LUF8lIobs_DuEjCZs-PQnHxmhtk'
+      'ey...' // ANON KEY
     );
 
     const localVideo = document.getElementById('localVideo');
@@ -39,107 +58,95 @@
     if (type === 'voice') {
       remoteVideo.style.display = 'none';
       localVideo.style.display = 'none';
-      callTitle.innerText = '🔊 Sesli Çağrı Yanıtlanıyor...';
+      callTitle.innerText = '🔊 Sesli Görüşme';
     } else {
-      callTitle.innerText = '🎥 Görüntülü Çağrı Yanıtlanıyor...';
+      callTitle.innerText = '🎥 Görüntülü Görüşme';
     }
 
-    async function pollIceCandidates(fromWho) {
-      let seen = new Set();
-      setInterval(async () => {
-        const { data: candidates } = await supabase
-          .from('calls_ice')
+    async function waitForSDPOffer(call_id, retries = 10) {
+      for (let i = 0; i < retries; i++) {
+        const { data: call } = await supabase
+          .from('calls')
           .select('*')
-          .eq('call_ref', call_id)
-          .eq('sender', fromWho);
-
-        for (const c of candidates) {
-          const key = c.candidate + c.sdp_mid + c.sdp_mline_index;
-          if (seen.has(key)) continue;
-          seen.add(key);
-          try {
-            await pc.addIceCandidate({
-              candidate: c.candidate,
-              sdpMid: c.sdp_mid,
-              sdpMLineIndex: c.sdp_mline_index
-            });
-          } catch (e) {
-            console.error("ICE eklenemedi:", e);
-          }
-        }
-      }, 1000);
+          .eq('call_id', call_id)
+          .single();
+        if (call?.sdp_offer) return call;
+        console.log(`⏳ SDP offer bekleniyor... (${i + 1})`);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+      throw new Error("❌ SDP offer zaman aşımı.");
     }
 
     async function init() {
+      console.log("🚀 Görüşme başlatılıyor...");
+      const call = await waitForSDPOffer(call_id);
+
       const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
       pc = new RTCPeerConnection(config);
 
+      pc.ontrack = (e) => {
+        console.log("📡 Uzaktaki video akışı geldi");
+        remoteVideo.srcObject = e.streams[0];
+      };
+
       pc.onicecandidate = async (event) => {
         if (event.candidate) {
-          await supabase.from('calls_ice').insert({
+          console.log("📨 ICE candidate gönderiliyor...");
+          const { error } = await supabase.from('calls_ice').insert({
             call_ref: call_id,
             candidate: event.candidate.candidate,
             sdp_mid: event.candidate.sdpMid,
             sdp_mline_index: event.candidate.sdpMLineIndex,
             sender: 'callee'
           });
+          if (error) console.error("❌ ICE insert hatası:", error);
         }
       };
 
-      pc.ontrack = (e) => {
-        remoteVideo.srcObject = e.streams[0];
-      };
-
-      let stream;
       try {
-        stream = await navigator.mediaDevices.getUserMedia({
+        const stream = await navigator.mediaDevices.getUserMedia({
           video: type === 'video',
           audio: true
         });
+        stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+        localVideo.srcObject = stream;
+        console.log("🎥 Kamera ve mikrofon bağlandı");
       } catch (e) {
-        console.error("🎥 Kamera/Mikrofon hatası:", e);
-        callTitle.innerText = "🎥 Cihaz erişimi başarısız.";
+        console.error("❌ Media erişim hatası:", e);
         return;
       }
 
-      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
-      localVideo.srcObject = stream;
+      try {
+        await pc.setRemoteDescription({ type: 'offer', sdp: call.sdp_offer });
+        console.log("📥 SDP offer set edildi");
 
-      const { data: call, error } = await supabase
-        .from('calls')
-        .select('sdp_offer')
-        .eq('call_id', call_id)
-        .single();
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        console.log("📤 SDP answer oluşturuldu");
 
-      if (error || !call?.sdp_offer) {
-        console.error("❌ SDP offer alınamadı:", error);
-        callTitle.innerText = "❌ SDP verisi alınamadı.";
-        return;
+        const { error } = await supabase
+          .from('calls')
+          .update({ sdp_answer: answer.sdp })
+          .eq('call_id', call_id);
+
+        if (error) {
+          console.error("❌ SDP answer update hatası:", error);
+        } else {
+          console.log("✅ SDP answer kaydedildi");
+        }
+      } catch (err) {
+        console.error("❌ SDP işlem hatası:", err);
       }
-
-      await pc.setRemoteDescription({
-        type: 'offer',
-        sdp: call.sdp_offer
-      });
-
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-
-      await supabase
-        .from('calls')
-        .update({ sdp_answer: answer.sdp })
-        .eq('call_id', call_id);
-
-      pollIceCandidates('caller');
     }
 
     function endCall() {
       pc?.getSenders().forEach(s => s.track?.stop());
       pc?.close();
+      console.log("🛑 Görüşme sonlandırıldı");
       window.close();
     }
 
-    window.addEventListener("DOMContentLoaded", init);
+    init();
   </script>
 </body>
 </html>
