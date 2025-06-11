@@ -32,7 +32,7 @@
       <p>Görüşme seçenekleri:</p>
       <button id="chatBtn" class="call-btn">💬 Yazılı Chat</button>
       <button id="voiceBtn" class="call-btn hidden">🔊 Sesli Görüşme</button>
-      <button id="videoBtn" class="call-btn hidden">🎥 Görüntülü Görüşme</button>
+      <button id="videoBtn" class="call-btn hidden">📰 Görüntülü Görüşme</button>
     </div>
   </div>
 
@@ -112,7 +112,7 @@
         if (res.ok && result.success) {
           status.textContent = '✅ Çağrı gönderildi. Lütfen bekleyin...';
           const callId = result.call_id;
-          window.location.href = `caller.html?session_id=${sessionId}&call_id=${callId}&type=${type}`;
+          window.location.href = `visitor-call.html?session_id=${sessionId}&call_id=${callId}&type=${type}`;
         } else {
           status.textContent = `❌ ${result.error || 'Çağrı başarısız.'}`;
         }
