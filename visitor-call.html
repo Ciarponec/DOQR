@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>DOQR - Çağrı Başlat</title>
+  <title>DOQR - Ziyaretçi Görüşme</title>
   <style>
     body { font-family: sans-serif; text-align: center; background: #f0f0f0; padding: 2em; }
     video { width: 100%; max-height: 200px; margin-bottom: 1em; border-radius: 12px; background: black; }
@@ -11,7 +11,7 @@
   </style>
 </head>
 <body>
-  <h2 id="callTitle">📞 Çağrı Başlatılıyor...</h2>
+  <h2 id="callTitle">📞 Görüşme Başlatılıyor...</h2>
   <video id="localVideo" autoplay muted playsinline></video>
   <video id="remoteVideo" autoplay playsinline></video>
   <br />
@@ -26,11 +26,9 @@
     const type = params.get('type');
 
     const role = 'visitor';
-    const isCaller = true;
-
     const supabase = createClient(
       'https://npvwenwghmxmrzqbfgbq.supabase.co',
-      'public-anon-key'
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5wdndlbndnaG14bXJ6cWJmZ2JxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgyMDE1NDMsImV4cCI6MjA2Mzc3NzU0M30.feUs88g74qKEZU57LUF8lIobs_DuEjCZs-PQnHxmhtk'
     );
 
     const localVideo = document.getElementById('localVideo');
@@ -41,9 +39,9 @@
     if (type === 'voice') {
       remoteVideo.style.display = 'none';
       localVideo.style.display = 'none';
-      callTitle.innerText = '🔊 Sesli Çağrı Başlatılıyor...';
+      callTitle.innerText = '🔊 Sesli Görüşme Başlatılıyor...';
     } else {
-      callTitle.innerText = '📹 Görüntülü Çağrı Başlatılıyor...';
+      callTitle.innerText = '🎥 Görüntülü Görüşme Başlatılıyor...';
     }
 
     async function pollIceCandidates(fromWho) {
@@ -104,14 +102,14 @@
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
 
-        await supabase.from('calls').update({
-          sdp_offer: offer.sdp
-        }).eq('call_id', call_id);
+        await supabase.from('calls')
+          .update({ sdp_offer: offer.sdp })
+          .eq('call_id', call_id);
 
         let attempt = 0;
         const maxAttempts = 20;
         const interval = setInterval(async () => {
-          const { data, error } = await supabase
+          const { data } = await supabase
             .from('calls')
             .select('sdp_answer')
             .eq('call_id', call_id)
@@ -121,24 +119,25 @@
             clearInterval(interval);
             try {
               await pc.setRemoteDescription({ type: 'answer', sdp: data.sdp_answer });
-              console.log('✅ SDP answer ayarlandi');
+              console.log('✅ SDP yanıtı ayarlandı');
             } catch (e) {
-              console.error('❌ SDP answer hatasi:', e);
+              console.error('❌ SDP yanıtı hatası:', e);
+              callTitle.innerText = '⚠️ SDP yanıtı ayarlanamadı';
             }
           } else {
             attempt++;
-            console.log(`⏳ SDP answer bekleniyor... (${attempt})`);
+            console.log(`⏳ SDP yanıtı bekleniyor... (${attempt})`);
             if (attempt >= maxAttempts) {
               clearInterval(interval);
-              callTitle.innerText = '⚠️ SDP answer alinamadi';
+              callTitle.innerText = '⚠️ SDP yanıtı alınamadı';
             }
           }
         }, 2000);
 
         pollIceCandidates('owner');
       } catch (e) {
-        console.error('🚨 init hata:', e);
-        callTitle.innerText = '🚨 Baglanti hatasi';
+        console.error('🚨 Bağlantı hatası:', e);
+        callTitle.innerText = '🚨 Bağlantı hatası oluştu';
       }
     }
 
