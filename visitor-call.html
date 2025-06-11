@@ -120,6 +120,10 @@
             try {
               await pc.setRemoteDescription({ type: 'answer', sdp: data.sdp_answer });
               console.log('✅ SDP yanıtı ayarlandı');
+
+              // ICE polling'i burada başlat
+              pollIceCandidates('owner');
+
             } catch (e) {
               console.error('❌ SDP yanıtı hatası:', e);
               callTitle.innerText = '⚠️ SDP yanıtı ayarlanamadı';
@@ -134,7 +138,6 @@
           }
         }, 2000);
 
-        pollIceCandidates('owner');
       } catch (e) {
         console.error('🚨 Bağlantı hatası:', e);
         callTitle.innerText = '🚨 Bağlantı hatası oluştu';
