@@ -144,11 +144,36 @@
       }
     }
 
-    function endCall() {
-      pc?.getSenders().forEach(s => s.track?.stop());
-      pc?.close();
-      window.close();
+async function endCall() {
+  try {
+    // Medya akışlarını durdur
+    pc?.getSenders().forEach(s => s.track?.stop());
+    pc?.close();
+
+    localVideo.srcObject?.getTracks().forEach(track => track.stop());
+    remoteVideo.srcObject?.getTracks().forEach(track => track.stop());
+    localVideo.srcObject = null;
+    remoteVideo.srcObject = null;
+
+    // Veritabanında görüşmeyi sonlandır
+    const { error } = await supabase
+      .from('calls')
+      .update({ status: 'ended' })
+      .eq('call_id', call_id);
+
+    if (error) {
+      console.warn("⚠️ calls tablosu güncellenemedi:", error);
+    } else {
+      console.log("✅ Görüşme 'ended' olarak güncellendi.");
     }
+  } catch (e) {
+    console.error("❌ endCall hata:", e);
+  } finally {
+    // Yönlendirme
+    window.location.replace('https://ciarponec.github.io/DOQR/ended.html');
+  }
+}
+
 
     window.addEventListener("DOMContentLoaded", init);
   </script>
