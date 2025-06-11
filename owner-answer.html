@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DOQR - Çağrıyı Yanıtla</title>
+  <title>DOQR - Çağrıyı Yanıtla (Debug)</title>
   <style>
     body { font-family: sans-serif; text-align: center; background: #f0f0f0; padding: 2em; }
     video { width: 100%; max-height: 200px; margin-bottom: 1em; border-radius: 12px; background: black; }
@@ -26,17 +26,23 @@
     const type = params.get('type');
 
     const role = 'owner';
-    const isCaller = false;
 
     const supabase = createClient(
       'https://npvwenwghmxmrzqbfgbq.supabase.co',
-      'public-anon-key'
+      'public-anon-key' // 🔒 Değiştirmen gerekiyorsa burada
     );
 
     const localVideo = document.getElementById('localVideo');
     const remoteVideo = document.getElementById('remoteVideo');
     const callTitle = document.getElementById('callTitle');
     let pc;
+
+    console.log("📦 Gelen parametreler:", { session_id, call_id, type });
+
+    if (!call_id) {
+      callTitle.innerText = '❌ call_id eksik!';
+      throw new Error("call_id URL'de yok");
+    }
 
     if (type === 'voice') {
       remoteVideo.style.display = 'none';
@@ -49,11 +55,16 @@
     async function pollIceCandidates(fromWho) {
       let seen = new Set();
       setInterval(async () => {
-        const { data: candidates } = await supabase
+        const { data: candidates, error } = await supabase
           .from('calls_ice')
           .select('*')
           .eq('call_ref', call_id)
           .eq('sender', fromWho);
+
+        if (error) {
+          console.error('ICE polling hatası:', error);
+          return;
+        }
 
         for (const c of candidates || []) {
           const key = c.candidate + c.sdp_mid + c.sdp_mline_index;
@@ -65,12 +76,12 @@
               sdpMid: c.sdp_mid,
               sdpMLineIndex: c.sdp_mline_index
             });
-            console.log('✅ ICE adayı eklendi:', c.candidate);
+            console.log('✅ ICE eklendi:', c.candidate);
           } catch (e) {
-            console.error('❌ ICE adayı eklenemedi:', e);
+            console.error('❌ ICE eklenemedi:', e);
           }
         }
-      }, 1000);
+      }, 1500);
     }
 
     async function init() {
@@ -80,13 +91,18 @@
 
         pc.onicecandidate = async (event) => {
           if (event.candidate) {
-            await supabase.from('calls_ice').insert({
+            const { error } = await supabase.from('calls_ice').insert({
               call_ref: call_id,
               candidate: event.candidate.candidate,
               sdp_mid: event.candidate.sdpMid,
               sdp_mline_index: event.candidate.sdpMLineIndex,
               sender: role
             });
+            if (error) {
+              console.error("❌ ICE yazılamadı:", error);
+            } else {
+              console.log("📨 ICE gönderildi:", event.candidate.candidate);
+            }
           }
         };
 
@@ -94,36 +110,62 @@
           remoteVideo.srcObject = e.streams[0];
         };
 
-        const { data, error } = await supabase
-          .from('calls')
-          .select('sdp_offer')
-          .eq('call_id', call_id)
-          .single();
+        // 🔁 SDP offer'ı bekle
+        let attempt = 0;
+        const maxAttempts = 15;
+        const waitForOffer = setInterval(async () => {
+          attempt++;
+          const { data, error } = await supabase
+            .from('calls')
+            .select('sdp_offer')
+            .eq('call_id', call_id)
+            .single();
 
-        if (!data?.sdp_offer) {
-          callTitle.innerText = '⚠️ SDP Teklifi bulunamadı';
-          return;
-        }
+          if (error) {
+            console.error("❌ SDP offer sorgu hatası:", error);
+            clearInterval(waitForOffer);
+            callTitle.innerText = '⚠️ SDP Teklifi alınamadı';
+            return;
+          }
 
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: type === 'video',
-          audio: true
-        });
-        stream.getTracks().forEach((track) => pc.addTrack(track, stream));
-        localVideo.srcObject = stream;
+          if (data?.sdp_offer) {
+            clearInterval(waitForOffer);
+            console.log("📡 SDP Teklifi alındı:", data.sdp_offer);
 
-        await pc.setRemoteDescription({ type: 'offer', sdp: data.sdp_offer });
+            const stream = await navigator.mediaDevices.getUserMedia({
+              video: type === 'video',
+              audio: true
+            });
+            stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+            localVideo.srcObject = stream;
 
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
+            await pc.setRemoteDescription({ type: 'offer', sdp: data.sdp_offer });
 
-        await supabase.from('calls').update({
-          sdp_answer: answer.sdp
-        }).eq('call_id', call_id);
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
 
-        pollIceCandidates('visitor');
+            const { error: updateError } = await supabase.from('calls')
+              .update({ sdp_answer: answer.sdp })
+              .eq('call_id', call_id);
+
+            if (updateError) {
+              console.error("❌ SDP yanıtı yazılamadı:", updateError);
+              callTitle.innerText = '❌ SDP answer kaydedilemedi';
+            } else {
+              console.log("✅ SDP yanıtı yazıldı:", answer.sdp);
+              callTitle.innerText = '✅ Bağlantı kuruluyor...';
+              pollIceCandidates('visitor');
+            }
+          } else {
+            console.log(`⏳ SDP bekleniyor... (${attempt})`);
+            if (attempt >= maxAttempts) {
+              clearInterval(waitForOffer);
+              callTitle.innerText = '⚠️ SDP Teklifi bulunamadı';
+            }
+          }
+        }, 2000);
       } catch (e) {
-        console.error('🚨 init hata:', e);
+        console.error('🚨 Genel hata:', e);
         callTitle.innerText = '🚨 Bağlantı hatası';
       }
     }
