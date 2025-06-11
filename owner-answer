@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DOQR - Çağrıyı Yanıtla</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; background: #f0f0f0; padding: 2em; }
+    video { width: 100%; max-height: 200px; margin-bottom: 1em; border-radius: 12px; background: black; }
+    button { padding: 1em 2em; font-size: 16px; border-radius: 8px; border: none; background: #1976d2; color: white; }
+  </style>
+</head>
+<body>
+  <h2 id="callTitle">📞 Çağrı Yanıtlanıyor...</h2>
+  <video id="localVideo" autoplay muted playsinline></video>
+  <video id="remoteVideo" autoplay playsinline></video>
+  <br />
+  <button onclick="endCall()">Görüşmeyi Bitir</button>
+
+  <script type="module">
+    import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+    const params = new URLSearchParams(window.location.search);
+    const session_id = params.get('session_id');
+    const call_id = params.get('call_id');
+    const type = params.get('type');
+
+    const role = 'owner';
+    const isCaller = false;
+
+    const supabase = createClient(
+      'https://npvwenwghmxmrzqbfgbq.supabase.co',
+      'public-anon-key'
+    );
+
+    const localVideo = document.getElementById('localVideo');
+    const remoteVideo = document.getElementById('remoteVideo');
+    const callTitle = document.getElementById('callTitle');
+    let pc;
+
+    if (type === 'voice') {
+      remoteVideo.style.display = 'none';
+      localVideo.style.display = 'none';
+      callTitle.innerText = '🔊 Sesli Çağrı Yanıtlanıyor...';
+    } else {
+      callTitle.innerText = '🎥 Görüntülü Çağrı Yanıtlanıyor...';
+    }
+
+    async function pollIceCandidates(fromWho) {
+      let seen = new Set();
+      setInterval(async () => {
+        const { data: candidates } = await supabase
+          .from('calls_ice')
+          .select('*')
+          .eq('call_ref', call_id)
+          .eq('sender', fromWho);
+
+        for (const c of candidates || []) {
+          const key = c.candidate + c.sdp_mid + c.sdp_mline_index;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          try {
+            await pc.addIceCandidate({
+              candidate: c.candidate,
+              sdpMid: c.sdp_mid,
+              sdpMLineIndex: c.sdp_mline_index
+            });
+            console.log('✅ ICE adayı eklendi:', c.candidate);
+          } catch (e) {
+            console.error('❌ ICE adayı eklenemedi:', e);
+          }
+        }
+      }, 1000);
+    }
+
+    async function init() {
+      try {
+        const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+        pc = new RTCPeerConnection(config);
+
+        pc.onicecandidate = async (event) => {
+          if (event.candidate) {
+            await supabase.from('calls_ice').insert({
+              call_ref: call_id,
+              candidate: event.candidate.candidate,
+              sdp_mid: event.candidate.sdpMid,
+              sdp_mline_index: event.candidate.sdpMLineIndex,
+              sender: role
+            });
+          }
+        };
+
+        pc.ontrack = (e) => {
+          remoteVideo.srcObject = e.streams[0];
+        };
+
+        const { data, error } = await supabase
+          .from('calls')
+          .select('sdp_offer')
+          .eq('call_id', call_id)
+          .single();
+
+        if (!data?.sdp_offer) {
+          callTitle.innerText = '⚠️ SDP Teklifi bulunamadı';
+          return;
+        }
+
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: type === 'video',
+          audio: true
+        });
+        stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+        localVideo.srcObject = stream;
+
+        await pc.setRemoteDescription({ type: 'offer', sdp: data.sdp_offer });
+
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+
+        await supabase.from('calls').update({
+          sdp_answer: answer.sdp
+        }).eq('call_id', call_id);
+
+        pollIceCandidates('visitor');
+      } catch (e) {
+        console.error('🚨 init hata:', e);
+        callTitle.innerText = '🚨 Bağlantı hatası';
+      }
+    }
+
+    function endCall() {
+      pc?.getSenders().forEach(s => s.track?.stop());
+      pc?.close();
+      window.close();
+    }
+
+    window.addEventListener("DOMContentLoaded", init);
+  </script>
+</body>
+</html>
