@@ -15,12 +15,57 @@
       color: white;
       border: none;
       border-radius: 8px;
+      cursor: pointer;
     }
+    #langSelect { position: absolute; right: 20px; top: 16px; font-size: 16px; }
   </style>
 </head>
 <body>
-  <h1>📴 Görüşme Sonlandırıldı</h1>
-  <p>Görüşmeniz başarıyla sona erdi.</p>
-  <button onclick="window.close()">Sekmeyi Kapat</button>
+  <select id="langSelect">
+    <option value="tr">🇹🇷 Türkçe</option>
+    <option value="en">🇬🇧 English</option>
+    <option value="ru">🇷🇺 Русский</option>
+  </select>
+  <h1 id="endTitle">📴 Görüşme Sonlandırıldı</h1>
+  <p id="endMsg">Görüşmeniz başarıyla sona erdi.</p>
+  <button id="closeBtn" onclick="window.close()">Sekmeyi Kapat</button>
+
+  <script>
+    const TEXTS = {
+      end_title: {
+        tr: "📴 Görüşme Sonlandırıldı",
+        en: "📴 Call Ended",
+        ru: "📴 Звонок завершён"
+      },
+      end_msg: {
+        tr: "Görüşmeniz başarıyla sona erdi.",
+        en: "Your call has ended successfully.",
+        ru: "Ваш звонок успешно завершён."
+      },
+      close_btn: {
+        tr: "Sekmeyi Kapat",
+        en: "Close Tab",
+        ru: "Закрыть вкладку"
+      }
+    };
+
+    // Dil parametresi ya da localStorage
+    const params = new URLSearchParams(window.location.search);
+    let lang = params.get('lang') || localStorage.getItem('doqrLang') || (navigator.language.startsWith('tr') ? 'tr' : (navigator.language.startsWith('ru') ? 'ru' : 'en'));
+    document.getElementById('langSelect').value = lang;
+
+    function setTexts() {
+      document.getElementById('endTitle').textContent = TEXTS.end_title[lang];
+      document.getElementById('endMsg').textContent = TEXTS.end_msg[lang];
+      document.getElementById('closeBtn').textContent = TEXTS.close_btn[lang];
+    }
+    setTexts();
+
+    document.getElementById('langSelect').onchange = (e) => {
+      lang = e.target.value;
+      localStorage.setItem('doqrLang', lang);
+      setTexts();
+    };
+  </script>
 </body>
 </html>
