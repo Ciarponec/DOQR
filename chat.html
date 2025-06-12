@@ -5,39 +5,135 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>DOQR - Chat</title>
   <style>
-    body { font-family: sans-serif; padding: 1em; background: #f3f3f3; }
-    #chatbox { max-width: 500px; margin: auto; background: white; padding: 1em; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-    #messages { max-height: 300px; overflow-y: auto; border: 1px solid #ccc; padding: 0.5em; border-radius: 6px; margin-bottom: 1em; background: #fff; }
-    .message { margin-bottom: 0.5em; }
-    input, button {
-      padding: 0.6em;
-      font-size: 1em;
-      border-radius: 6px;
-      border: 1px solid #ccc;
+    body {
+      background: #f3f3f3;
+      font-family: 'Inter', Arial, sans-serif;
+      margin: 0;
+      padding: 0;
     }
-    input { width: 80%; }
-    button { width: 18%; background: #1976d2; color: white; border: none; cursor: pointer; }
+    #chatbox {
+      max-width: 450px;
+      margin: 24px auto;
+      background: #fff;
+      border-radius: 18px;
+      box-shadow: 0 4px 28px rgba(0,0,0,0.07), 0 1.5px 4px rgba(0,0,0,0.07);
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      min-height: 60vh;
+    }
+    #messages {
+      flex: 1;
+      max-height: 350px;
+      overflow-y: auto;
+      margin-bottom: 18px;
+      padding-right: 4px;
+    }
+    .message-row {
+      display: flex;
+      align-items: flex-end;
+      margin-bottom: 10px;
+    }
+    .avatar {
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      background: #d6d6d6;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: bold; color: #fff; font-size: 17px;
+      margin-right: 10px;
+      flex-shrink: 0;
+    }
+    .message-bubble {
+      padding: 11px 14px;
+      border-radius: 14px;
+      background: #e2f0fd;
+      color: #212121;
+      font-size: 15px;
+      max-width: 70vw;
+      min-width: 40px;
+      word-break: break-word;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.07);
+      position: relative;
+    }
+    .from-owner .message-bubble {
+      background: #1976d2;
+      color: #fff;
+    }
+    .from-owner {
+      flex-direction: row-reverse;
+    }
+    .from-owner .avatar {
+      background: #1976d2;
+      margin-left: 10px;
+      margin-right: 0;
+    }
+    .from-visitor .avatar {
+      background: #6c757d;
+    }
+    .msg-meta {
+      font-size: 11px;
+      color: #7e7e7e;
+      margin-top: 3px;
+      text-align: right;
+    }
+    #inputRow {
+      display: flex; gap: 10px; margin-top: 7px;
+    }
+    #messageInput {
+      flex: 1;
+      padding: 11px;
+      font-size: 16px;
+      border-radius: 9px;
+      border: 1px solid #ccc;
+      outline: none;
+      background: #fafbfc;
+      transition: border 0.2s;
+    }
+    #messageInput:focus {
+      border: 1.2px solid #1976d2;
+    }
+    #sendBtn {
+      padding: 11px 18px;
+      border-radius: 9px;
+      background: #1976d2;
+      color: #fff;
+      font-weight: bold;
+      border: none;
+      cursor: pointer;
+      font-size: 16px;
+      transition: background 0.2s;
+    }
+    #sendBtn:disabled {
+      background: #b5b5b5;
+      cursor: not-allowed;
+    }
+    #chatTitle {
+      text-align: center; margin-bottom: 15px; font-size: 19px; color: #1976d2; letter-spacing: .1em;
+    }
   </style>
 </head>
 <body>
   <div id="chatbox">
-    <h2>💬 Yazılı Chat</h2>
+    <div id="chatTitle">💬 DOQR Chat</div>
     <div id="messages"></div>
-    <input type="text" id="messageInput" placeholder="Mesaj yaz..." />
-    <button onclick="sendMessage()">Gönder</button>
+    <div id="inputRow">
+      <input type="text" id="messageInput" placeholder="Mesaj yazın..." autocomplete="off" />
+      <button id="sendBtn">Gönder</button>
+    </div>
   </div>
 
   <script type="module">
     import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
+    // Parametreler
     const params = new URLSearchParams(window.location.search);
-    let session_id = params.get('session_id');
+    const session_id = params.get('session_id');
+    let sender = params.get('sender') || 'visitor'; // default visitor, owner için &sender=owner ekle
 
-    if (typeof FFAppState !== 'undefined') {
-      session_id = session_id || FFAppState().sessionId;
-      FFAppState().sessionId = session_id;
-    }
+    // Görünüm için avatar harfi belirle
+    const AVATAR_LETTERS = { owner: 'E', visitor: 'Z' }; // Ev sahibi, Ziyaretçi
 
+    // Supabase ayarları
     const supabase = createClient(
       'https://npvwenwghmxmrzqbfgbq.supabase.co',
       'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5wdndlbndnaG14bXJ6cWJmZ2JxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgyMDE1NDMsImV4cCI6MjA2Mzc3NzU0M30.feUs88g74qKEZU57LUF8lIobs_DuEjCZs-PQnHxmhtk'
@@ -45,10 +141,22 @@
 
     const messagesDiv = document.getElementById('messages');
     const input = document.getElementById('messageInput');
+    const sendBtn = document.getElementById('sendBtn');
 
+    // Saat biçimi
+    function formatTime(dtString) {
+      try {
+        const d = new Date(dtString);
+        return d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+      } catch {
+        return '';
+      }
+    }
+
+    // Mesajları yükle
     async function loadMessages() {
       if (!session_id) {
-        console.warn("⚠️ session_id yok, mesajlar yüklenemez.");
+        messagesDiv.innerHTML = `<div style="color:#e74c3c;text-align:center;">Session ID yok.</div>`;
         return;
       }
       const { data, error } = await supabase
@@ -58,47 +166,79 @@
         .order('created_at', { ascending: true });
 
       if (error) {
-        console.error("❌ Mesaj sorgusu hatası:", error);
+        messagesDiv.innerHTML = `<div style="color:#e74c3c;text-align:center;">Mesajlar yüklenemedi.</div>`;
         return;
       }
 
       messagesDiv.innerHTML = '';
-      (data || []).forEach(m => {
-        const div = document.createElement('div');
-        div.className = 'message';
-        const displayName = m.sender === 'visitor' ? 'Ziyaretçi' : 'Ev Sahibi';
-        div.textContent = `${displayName}: ${m.text}`;
-        messagesDiv.appendChild(div);
+      (data || []).forEach(msg => {
+        const from = msg.sender === 'owner' ? 'from-owner' : 'from-visitor';
+        const row = document.createElement('div');
+        row.className = `message-row ${from}`;
+        // Avatar
+        const avatarDiv = document.createElement('div');
+        avatarDiv.className = `avatar`;
+        avatarDiv.textContent = AVATAR_LETTERS[msg.sender] || msg.sender[0].toUpperCase();
+
+        // Balon
+        const bubble = document.createElement('div');
+        bubble.className = 'message-bubble';
+        bubble.innerHTML = `<span>${msg.text}</span>
+            <div class="msg-meta">${formatTime(msg.created_at)}</div>`;
+
+        // Sıra (owner sağa, visitor sola)
+        if (from === 'from-owner') {
+          row.appendChild(avatarDiv);
+          row.appendChild(bubble);
+        } else {
+          row.appendChild(avatarDiv);
+          row.appendChild(bubble);
+        }
+        messagesDiv.appendChild(row);
       });
 
+      // Otomatik scroll
       messagesDiv.scrollTop = messagesDiv.scrollHeight;
     }
 
+    // Edge function ile mesaj gönder
     async function sendMessage() {
       const text = input.value.trim();
-      if (!text) return;
-      if (!session_id) {
-        alert("❌ session_id yok, mesaj gönderilemez.");
-        return;
+      if (!text || !session_id) return;
+      sendBtn.disabled = true;
+      try {
+        const resp = await fetch(
+          'https://npvwenwghmxmrzqbfgbq.functions.supabase.co/send-chat-message',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ session_id, sender, text })
+          }
+        );
+        const res = await resp.json();
+        if (!resp.ok || !res.success) {
+          alert(res.error || "Mesaj gönderilemedi.");
+        } else {
+          input.value = '';
+        }
+      } catch (e) {
+        alert("Ağ hatası: " + e.message);
       }
-
-      const { error } = await supabase.from('chat_messages').insert({
-        session_ref: session_id,
-        sender: 'visitor',
-        text
-      });
-
-      if (error) {
-        console.error("❌ Mesaj gönderilemedi:", error);
-        alert("Mesaj gönderilemedi.");
-        return;
-      }
-
-      input.value = '';
+      sendBtn.disabled = false;
     }
 
+    // Gönder tuşu ile mesaj gönder
+    sendBtn.onclick = sendMessage;
+
+    // Enter ile mesaj gönder
+    input.addEventListener('keyup', (e) => {
+      if (e.key === 'Enter') sendMessage();
+    });
+
+    // Sayfa yüklenince mesajları yükle
     loadMessages();
 
+    // Supabase Realtime ile yeni mesajları dinle
     supabase.channel('chat_channel')
       .on('postgres_changes', {
         event: 'INSERT',
@@ -106,7 +246,6 @@
         table: 'chat_messages',
         filter: `session_ref=eq.${session_id}`
       }, payload => {
-        console.log("📨 Yeni mesaj geldi:", payload);
         loadMessages();
       })
       .subscribe();
