@@ -110,9 +110,21 @@
     #chatTitle {
       text-align: center; margin-bottom: 15px; font-size: 19px; color: #1976d2; letter-spacing: .1em;
     }
+    #langSelect {
+      position: absolute;
+      top: 14px;
+      right: 20px;
+      z-index: 99;
+      font-size: 16px;
+    }
   </style>
 </head>
 <body>
+  <select id="langSelect">
+    <option value="tr">🇹🇷 Türkçe</option>
+    <option value="en">🇬🇧 English</option>
+    <option value="ru">🇷🇺 Русский</option>
+  </select>
   <div id="chatbox">
     <div id="chatTitle">💬 DOQR Chat</div>
     <div id="messages"></div>
@@ -125,12 +137,61 @@
   <script type="module">
     import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
+    // Dil sözlüğü
+    const TEXTS = {
+      chat_title: {
+        tr: "💬 DOQR Sohbet",
+        en: "💬 DOQR Chat",
+        ru: "💬 DOQR Чат"
+      },
+      msg_placeholder: {
+        tr: "Mesaj yazın...",
+        en: "Type a message...",
+        ru: "Напишите сообщение..."
+      },
+      send: {
+        tr: "Gönder",
+        en: "Send",
+        ru: "Отправить"
+      },
+      error_no_session: {
+        tr: "Session ID yok.",
+        en: "No session ID.",
+        ru: "Нет идентификатора сессии."
+      },
+      error_load: {
+        tr: "Mesajlar yüklenemedi.",
+        en: "Failed to load messages.",
+        ru: "Не удалось загрузить сообщения."
+      },
+      error_send: {
+        tr: "Mesaj gönderilemedi.",
+        en: "Failed to send message.",
+        ru: "Не удалось отправить сообщение."
+      },
+      error_network: {
+        tr: "Ağ hatası: ",
+        en: "Network error: ",
+        ru: "Сетевая ошибка: "
+      }
+    };
+
     // Parametreler
     const params = new URLSearchParams(window.location.search);
     const session_id = params.get('session_id');
     let sender = params.get('sender') || 'visitor'; // default visitor, owner için &sender=owner ekle
 
-    // Görünüm için avatar harfi belirle
+    // Dil parametresi ve seçimi
+    let lang = params.get('lang') || localStorage.getItem('doqrLang') || (navigator.language.startsWith('tr') ? 'tr' : (navigator.language.startsWith('ru') ? 'ru' : 'en'));
+    document.getElementById('langSelect').value = lang;
+
+    document.getElementById('langSelect').onchange = (e) => {
+      lang = e.target.value;
+      localStorage.setItem('doqrLang', lang);
+      setTexts();
+    };
+
+    // Avatar harfleri
     const AVATAR_LETTERS = { owner: 'E', visitor: 'Z' }; // Ev sahibi, Ziyaretçi
 
     // Supabase ayarları
@@ -139,15 +200,25 @@
       'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5wdndlbndnaG14bXJ6cWJmZ2JxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgyMDE1NDMsImV4cCI6MjA2Mzc3NzU0M30.feUs88g74qKEZU57LUF8lIobs_DuEjCZs-PQnHxmhtk'
     );
 
+    const chatTitleDiv = document.getElementById('chatTitle');
     const messagesDiv = document.getElementById('messages');
     const input = document.getElementById('messageInput');
     const sendBtn = document.getElementById('sendBtn');
+
+    // Metinleri güncelle
+    function setTexts() {
+      chatTitleDiv.textContent = TEXTS.chat_title[lang];
+      input.placeholder = TEXTS.msg_placeholder[lang];
+      sendBtn.textContent = TEXTS.send[lang];
+      // Eğer hata varsa çevirisini güncellemek için loadMessages()'ı çağırabiliriz.
+    }
+    setTexts();
 
     // Saat biçimi
     function formatTime(dtString) {
       try {
         const d = new Date(dtString);
-        return d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+        return d.toLocaleTimeString(lang === 'ru' ? 'ru-RU' : lang === 'en' ? 'en-US' : 'tr-TR', { hour: '2-digit', minute: '2-digit' });
       } catch {
         return '';
       }
@@ -156,7 +227,7 @@
     // Mesajları yükle
     async function loadMessages() {
       if (!session_id) {
-        messagesDiv.innerHTML = `<div style="color:#e74c3c;text-align:center;">Session ID yok.</div>`;
+        messagesDiv.innerHTML = `<div style="color:#e74c3c;text-align:center;">${TEXTS.error_no_session[lang]}</div>`;
         return;
       }
       const { data, error } = await supabase
@@ -166,7 +237,7 @@
         .order('created_at', { ascending: true });
 
       if (error) {
-        messagesDiv.innerHTML = `<div style="color:#e74c3c;text-align:center;">Mesajlar yüklenemedi.</div>`;
+        messagesDiv.innerHTML = `<div style="color:#e74c3c;text-align:center;">${TEXTS.error_load[lang]}</div>`;
         return;
       }
 
@@ -187,13 +258,8 @@
             <div class="msg-meta">${formatTime(msg.created_at)}</div>`;
 
         // Sıra (owner sağa, visitor sola)
-        if (from === 'from-owner') {
-          row.appendChild(avatarDiv);
-          row.appendChild(bubble);
-        } else {
-          row.appendChild(avatarDiv);
-          row.appendChild(bubble);
-        }
+        row.appendChild(avatarDiv);
+        row.appendChild(bubble);
         messagesDiv.appendChild(row);
       });
 
@@ -217,12 +283,12 @@
         );
         const res = await resp.json();
         if (!resp.ok || !res.success) {
-          alert(res.error || "Mesaj gönderilemedi.");
+          alert(res.error || TEXTS.error_send[lang]);
         } else {
           input.value = '';
         }
       } catch (e) {
-        alert("Ağ hatası: " + e.message);
+        alert(TEXTS.error_network[lang] + (e.message));
       }
       sendBtn.disabled = false;
     }
@@ -237,6 +303,9 @@
 
     // Sayfa yüklenince mesajları yükle
     loadMessages();
+
+    // Dil değiştiğinde tekrar mesajları ve başlığı güncelle
+    document.getElementById('langSelect').addEventListener('change', loadMessages);
 
     // Supabase Realtime ile yeni mesajları dinle
     supabase.channel('chat_channel')
