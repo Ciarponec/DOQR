@@ -16,20 +16,26 @@
     .hidden { display: none; }
     #status { margin-top: 1em; font-weight: bold; }
     .call-btn { display: block; width: 100%; max-width: 300px; margin: 0.5em auto; }
+    #langSelect { position: absolute; right: 20px; top: 16px; font-size: 16px; }
   </style>
 </head>
 <body>
+  <select id="langSelect">
+    <option value="tr">🇹🇷 Türkçe</option>
+    <option value="en">🇬🇧 English</option>
+    <option value="ru">🇷🇺 Русский</option>
+  </select>
   <div class="container">
-    <h2>🔔 Zili Çal</h2>
-    <p>Lütfen isminizi ve mesajınızı girin (isteğe bağlı):</p>
+    <h2 id="title">🔔 Zili Çal</h2>
+    <p id="subtitle">Lütfen isminizi ve mesajınızı girin (isteğe bağlı):</p>
     <input type="text" id="visitorName" placeholder="Adınız (isteğe bağlı)" />
     <textarea id="visitorMessage" placeholder="Mesajınız"></textarea>
-    <button type="button" onclick="ringBell()">Zili Çal</button>
+    <button type="button" id="ringBtn" onclick="ringBell()">Zili Çal</button>
     <div id="status"></div>
 
     <!-- Görüşme seçenekleri -->
     <div id="communication-options" class="hidden">
-      <p>Görüşme seçenekleri:</p>
+      <p id="commOptionsTitle">Görüşme seçenekleri:</p>
       <button id="chatBtn" class="call-btn">💬 Yazılı Chat</button>
       <button id="voiceBtn" class="call-btn hidden">🔊 Sesli Görüşme</button>
       <button id="videoBtn" class="call-btn hidden">📰 Görüntülü Görüşme</button>
@@ -37,6 +43,118 @@
   </div>
 
   <script>
+    // Çok dilli metinler:
+    const TEXTS = {
+      title: {
+        tr: "🔔 Zili Çal",
+        en: "🔔 Ring the Bell",
+        ru: "🔔 Позвонить в звонок"
+      },
+      subtitle: {
+        tr: "Lütfen isminizi ve mesajınızı girin (isteğe bağlı):",
+        en: "Please enter your name and message (optional):",
+        ru: "Пожалуйста, введите имя и сообщение (необязательно):"
+      },
+      name_placeholder: {
+        tr: "Adınız (isteğe bağlı)",
+        en: "Your name (optional)",
+        ru: "Ваше имя (необязательно)"
+      },
+      message_placeholder: {
+        tr: "Mesajınız",
+        en: "Your message",
+        ru: "Ваше сообщение"
+      },
+      ring_btn: {
+        tr: "Zili Çal",
+        en: "Ring the Bell",
+        ru: "Позвонить"
+      },
+      status_sending: {
+        tr: "⏳ Gönderiliyor...",
+        en: "⏳ Sending...",
+        ru: "⏳ Отправка..."
+      },
+      status_noqr: {
+        tr: "❌ QR token eksik!",
+        en: "❌ QR token missing!",
+        ru: "❌ Отсутствует QR токен!"
+      },
+      status_success: {
+        tr: "✅ Zil başarıyla çalındı!",
+        en: "✅ The bell rang successfully!",
+        ru: "✅ Звонок успешно отправлен!"
+      },
+      comm_options: {
+        tr: "Görüşme seçenekleri:",
+        en: "Communication options:",
+        ru: "Варианты связи:"
+      },
+      chat: {
+        tr: "💬 Yazılı Chat",
+        en: "💬 Text Chat",
+        ru: "💬 Текстовый чат"
+      },
+      voice: {
+        tr: "🔊 Sesli Görüşme",
+        en: "🔊 Voice Call",
+        ru: "🔊 Аудиозвонок"
+      },
+      video: {
+        tr: "📰 Görüntülü Görüşme",
+        en: "📰 Video Call",
+        ru: "📰 Видеозвонок"
+      },
+      call_voice: {
+        tr: "📞 Sesli arama başlatılıyor...",
+        en: "📞 Starting voice call...",
+        ru: "📞 Начинается аудиозвонок..."
+      },
+      call_video: {
+        tr: "📞 Görüntülü arama başlatılıyor...",
+        en: "📞 Starting video call...",
+        ru: "📞 Начинается видеозвонок..."
+      },
+      call_sent: {
+        tr: "✅ Çağrı gönderildi. Lütfen bekleyin...",
+        en: "✅ Call sent. Please wait...",
+        ru: "✅ Вызов отправлен. Пожалуйста, подождите..."
+      },
+      comm_error: {
+        tr: "❌ Çağrı başarısız.",
+        en: "❌ Call failed.",
+        ru: "❌ Вызов не удался."
+      },
+      net_error: {
+        tr: "❌ Ağ hatası: ",
+        en: "❌ Network error: ",
+        ru: "❌ Сетевая ошибка: "
+      }
+    };
+
+    // Varsayılan dil: localStorage ya da tarayıcı dili
+    let lang = localStorage.getItem('doqrLang') || (navigator.language.startsWith('tr') ? 'tr' : (navigator.language.startsWith('ru') ? 'ru' : 'en'));
+    document.getElementById('langSelect').value = lang;
+
+    function setTexts() {
+      document.getElementById('title').textContent = TEXTS.title[lang];
+      document.getElementById('subtitle').textContent = TEXTS.subtitle[lang];
+      document.getElementById('visitorName').placeholder = TEXTS.name_placeholder[lang];
+      document.getElementById('visitorMessage').placeholder = TEXTS.message_placeholder[lang];
+      document.getElementById('ringBtn').textContent = TEXTS.ring_btn[lang];
+      document.getElementById('commOptionsTitle').textContent = TEXTS.comm_options[lang];
+      document.getElementById('chatBtn').textContent = TEXTS.chat[lang];
+      document.getElementById('voiceBtn').textContent = TEXTS.voice[lang];
+      document.getElementById('videoBtn').textContent = TEXTS.video[lang];
+    }
+    setTexts();
+
+    document.getElementById('langSelect').onchange = (e) => {
+      lang = e.target.value;
+      localStorage.setItem('doqrLang', lang);
+      setTexts();
+    };
+
     let sessionId = null;
 
     async function ringBell() {
@@ -46,8 +164,8 @@
       const qr_token = urlParams.get('qr');
       const status = document.getElementById('status');
 
-      status.textContent = '⏳ Gönderiliyor...';
-      if (!qr_token) return status.textContent = '❌ QR token eksik!';
+      status.textContent = TEXTS.status_sending[lang];
+      if (!qr_token) return status.textContent = TEXTS.status_noqr[lang];
 
       const payload = { qr_token, visitor_name: name || null, visitor_message: message || null };
       try {
@@ -66,12 +184,12 @@
           console.log('📦 AppState.sessionId set edildi:', sessionId);
         }
         console.log('🆔 sessionId:', sessionId);
-        status.innerHTML = '✅ Zil başarıyla çalındı!';
+        status.innerHTML = TEXTS.status_success[lang];
         document.getElementById('communication-options').classList.remove('hidden');
 
         // Chat yönlendirmesi
         document.getElementById('chatBtn').onclick = () => {
-          window.location.href = `chat.html?session_id=${sessionId}`;
+          window.location.href = `chat.html?session_id=${sessionId}&lang=${lang}`;
         };
 
         // İzin kontrolü
@@ -95,13 +213,13 @@
         }).catch(e => console.error('İzinler alınamadı:', e));
 
       } catch (e) {
-        status.textContent = `❌ Ağ hatası: ${e.message || e}`;
+        status.textContent = TEXTS.net_error[lang] + (e.message || e);
       }
     }
 
     async function sendCallRequest(type) {
       const status = document.getElementById('status');
-      status.textContent = `📞 ${type === 'voice' ? 'Sesli' : 'Görüntülü'} arama başlatılıyor...`;
+      status.textContent = type === 'voice' ? TEXTS.call_voice[lang] : TEXTS.call_video[lang];
       try {
         const res = await fetch('https://npvwenwghmxmrzqbfgbq.supabase.co/functions/v1/send-call-request', {
           method: 'POST',
@@ -110,14 +228,14 @@
         });
         const result = await res.json();
         if (res.ok && result.success) {
-          status.textContent = '✅ Çağrı gönderildi. Lütfen bekleyin...';
+          status.textContent = TEXTS.call_sent[lang];
           const callId = result.call_id;
-          window.location.href = `visitor-call.html?session_id=${sessionId}&call_id=${callId}&type=${type}`;
+          window.location.href = `visitor-call.html?session_id=${sessionId}&call_id=${callId}&type=${type}&lang=${lang}`;
         } else {
-          status.textContent = `❌ ${result.error || 'Çağrı başarısız.'}`;
+          status.textContent = result.error ? `❌ ${result.error}` : TEXTS.comm_error[lang];
         }
       } catch (e) {
-        status.textContent = `❌ Ağ hatası: ${e.message || e}`;
+        status.textContent = TEXTS.net_error[lang] + (e.message || e);
       }
     }
   </script>
