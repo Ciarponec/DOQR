@@ -8,19 +8,96 @@
     body { font-family: sans-serif; text-align: center; background: #f0f0f0; padding: 2em; }
     video { width: 100%; max-height: 200px; margin-bottom: 1em; border-radius: 12px; background: black; }
     button { padding: 1em 2em; font-size: 16px; border-radius: 8px; border: none; background: #1976d2; color: white; }
+    #langSelect { position: absolute; right: 20px; top: 16px; font-size: 16px; }
   </style>
 </head>
 <body>
+  <select id="langSelect">
+    <option value="tr">🇹🇷 Türkçe</option>
+    <option value="en">🇬🇧 English</option>
+    <option value="ru">🇷🇺 Русский</option>
+  </select>
   <h2 id="callTitle">📞 Görüşme Başlatılıyor...</h2>
   <video id="localVideo" autoplay muted playsinline></video>
   <video id="remoteVideo" autoplay playsinline></video>
   <br />
-  <button onclick="endCall()">Görüşmeyi Bitir</button>
+  <button id="endBtn" onclick="endCall()">Görüşmeyi Bitir</button>
 
   <script type="module">
+    // Çok dilli metinler:
+    const TEXTS = {
+      video_starting: {
+        tr: "🎥 Görüntülü Görüşme Başlatılıyor...",
+        en: "🎥 Starting Video Call...",
+        ru: "🎥 Запуск видеозвонка..."
+      },
+      voice_starting: {
+        tr: "🔊 Sesli Görüşme Başlatılıyor...",
+        en: "🔊 Starting Voice Call...",
+        ru: "🔊 Запуск аудиозвонка..."
+      },
+      sdp_waiting: {
+        tr: "⏳ Yanıt bekleniyor...",
+        en: "⏳ Waiting for answer...",
+        ru: "⏳ Ожидание ответа..."
+      },
+      sdp_failed: {
+        tr: "⚠️ SDP yanıtı alınamadı",
+        en: "⚠️ Failed to get SDP answer",
+        ru: "⚠️ Не удалось получить SDP-ответ"
+      },
+      end_btn: {
+        tr: "Görüşmeyi Bitir",
+        en: "End Call",
+        ru: "Завершить звонок"
+      },
+      ended: {
+        tr: "Görüşme sonlandırıldı.",
+        en: "Call ended.",
+        ru: "Звонок завершен."
+      },
+      conn_error: {
+        tr: "🚨 Bağlantı hatası oluştu",
+        en: "🚨 Connection error occurred",
+        ru: "🚨 Произошла ошибка соединения"
+      }
+    };
+
+    // Dil belirleme
+    const params = new URLSearchParams(window.location.search);
+    let lang = params.get('lang') || localStorage.getItem('doqrLang') || (navigator.language.startsWith('tr') ? 'tr' : (navigator.language.startsWith('ru') ? 'ru' : 'en'));
+    document.getElementById('langSelect').value = lang;
+    document.getElementById('langSelect').onchange = (e) => {
+      lang = e.target.value;
+      localStorage.setItem('doqrLang', lang);
+      setTexts();
+    };
+
+    // Metinleri güncelleyen fonksiyon
+    function setTexts(context = null) {
+      const type = params.get('type');
+      const callTitle = document.getElementById('callTitle');
+      if (type === 'voice') {
+        callTitle.innerText = TEXTS.voice_starting[lang];
+      } else {
+        callTitle.innerText = TEXTS.video_starting[lang];
+      }
+      document.getElementById('endBtn').textContent = TEXTS.end_btn[lang];
+      if (context === 'ended') {
+        callTitle.innerText = TEXTS.ended[lang];
+      }
+      if (context === 'conn_error') {
+        callTitle.innerText = TEXTS.conn_error[lang];
+      }
+      if (context === 'sdp_failed') {
+        callTitle.innerText = TEXTS.sdp_failed[lang];
+      }
+    }
+    setTexts();
+
+    // WebRTC & Supabase
     import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-    const params = new URLSearchParams(window.location.search);
     const session_id = params.get('session_id');
     const call_id = params.get('call_id');
     const type = params.get('type');
@@ -33,15 +110,11 @@
 
     const localVideo = document.getElementById('localVideo');
     const remoteVideo = document.getElementById('remoteVideo');
-    const callTitle = document.getElementById('callTitle');
     let pc;
 
     if (type === 'voice') {
       remoteVideo.style.display = 'none';
       localVideo.style.display = 'none';
-      callTitle.innerText = '🔊 Sesli Görüşme Başlatılıyor...';
-    } else {
-      callTitle.innerText = '🎥 Görüntülü Görüşme Başlatılıyor...';
     }
 
     async function pollIceCandidates(fromWho) {
@@ -126,56 +199,61 @@
 
             } catch (e) {
               console.error('❌ SDP yanıtı hatası:', e);
-              callTitle.innerText = '⚠️ SDP yanıtı ayarlanamadı';
+              setTexts('conn_error');
             }
           } else {
             attempt++;
             console.log(`⏳ SDP yanıtı bekleniyor... (${attempt})`);
             if (attempt >= maxAttempts) {
               clearInterval(interval);
-              callTitle.innerText = '⚠️ SDP yanıtı alınamadı';
+              setTexts('sdp_failed');
             }
           }
         }, 2000);
 
       } catch (e) {
         console.error('🚨 Bağlantı hatası:', e);
-        callTitle.innerText = '🚨 Bağlantı hatası oluştu';
+        setTexts('conn_error');
       }
     }
 
-async function endCall() {
-  try {
-    // Medya akışlarını durdur
-    pc?.getSenders().forEach(s => s.track?.stop());
-    pc?.close();
+    async function endCall() {
+      try {
+        // Medya akışlarını durdur
+        pc?.getSenders().forEach(s => s.track?.stop());
+        pc?.close();
 
-    localVideo.srcObject?.getTracks().forEach(track => track.stop());
-    remoteVideo.srcObject?.getTracks().forEach(track => track.stop());
-    localVideo.srcObject = null;
-    remoteVideo.srcObject = null;
+        localVideo.srcObject?.getTracks().forEach(track => track.stop());
+        remoteVideo.srcObject?.getTracks().forEach(track => track.stop());
+        localVideo.srcObject = null;
+        remoteVideo.srcObject = null;
 
-    // Veritabanında görüşmeyi sonlandır
-    const { error } = await supabase
-      .from('calls')
-      .update({ status: 'ended' })
-      .eq('call_id', call_id);
+        // Veritabanında görüşmeyi sonlandır
+        const { error } = await supabase
+          .from('calls')
+          .update({ status: 'ended' })
+          .eq('call_id', call_id);
 
-    if (error) {
-      console.warn("⚠️ calls tablosu güncellenemedi:", error);
-    } else {
-      console.log("✅ Görüşme 'ended' olarak güncellendi.");
+        if (error) {
+          console.warn("⚠️ calls tablosu güncellenemedi:", error);
+        } else {
+          console.log("✅ Görüşme 'ended' olarak güncellendi.");
+        }
+      } catch (e) {
+        console.error("❌ endCall hata:", e);
+      } finally {
+        setTexts('ended');
+        setTimeout(() => {
+          window.location.replace('https://ciarponec.github.io/DOQR/ended.html?lang=' + lang);
+        }, 1000);
+      }
     }
-  } catch (e) {
-    console.error("❌ endCall hata:", e);
-  } finally {
-    // Yönlendirme
-    window.location.replace('https://ciarponec.github.io/DOQR/ended.html');
-  }
-}
-window.endCall = endCall;
+    window.endCall = endCall;
 
     window.addEventListener("DOMContentLoaded", init);
+
+    // Her dil değişiminde başlık ve buton metni anında güncellenir
+    document.getElementById('langSelect').addEventListener('change', () => setTexts());
   </script>
 </body>
 </html>
