@@ -70,7 +70,7 @@
     setTexts();
 
     async function sendCallRequest() {
-      const res = await fetch("https://YOUR_PROJECT.functions.supabase.co/send-call-request", {
+      const res = await fetch("https://npvwenwghmxmrzqbfgbq.supabase.co/functions/v1/send-call-request", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ session_id, call_type: type })
