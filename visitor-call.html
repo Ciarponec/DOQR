@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="tr">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>DOQR - Ziyaretçi Görüşme</title>
   <style>
     body { font-family: sans-serif; text-align: center; background: #f0f0f0; padding: 2em; }
@@ -24,48 +24,36 @@
   <button id="endBtn" onclick="endCall()">Görüşmeyi Bitir</button>
 
   <script type="module">
-    // Çok dilli metinler:
+    import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+    // 🔧 Supabase Client
+    const supabase = createClient(
+      'https://npvwenwghmxmrzqbfgbq.supabase.co',
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5wdndlbndnaG14bXJ6cWJmZ2JxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgyMDE1NDMsImV4cCI6MjA2Mzc3NzU0M30.feUs88g74qKEZU57LUF8lIobs_DuEjCZs-PQnHxmhtk'
+    );
+
     const TEXTS = {
-      video_starting: {
-        tr: "🎥 Görüntülü Görüşme Başlatılıyor...",
-        en: "🎥 Starting Video Call...",
-        ru: "🎥 Запуск видеозвонка..."
-      },
-      voice_starting: {
-        tr: "🔊 Sesli Görüşme Başlatılıyor...",
-        en: "🔊 Starting Voice Call...",
-        ru: "🔊 Запуск аудиозвонка..."
-      },
-      sdp_waiting: {
-        tr: "⏳ Yanıt bekleniyor...",
-        en: "⏳ Waiting for answer...",
-        ru: "⏳ Ожидание ответа..."
-      },
-      sdp_failed: {
-        tr: "⚠️ SDP yanıtı alınamadı",
-        en: "⚠️ Failed to get SDP answer",
-        ru: "⚠️ Не удалось получить SDP-ответ"
-      },
-      end_btn: {
-        tr: "Görüşmeyi Bitir",
-        en: "End Call",
-        ru: "Завершить звонок"
-      },
-      ended: {
-        tr: "Görüşme sonlandırıldı.",
-        en: "Call ended.",
-        ru: "Звонок завершен."
-      },
-      conn_error: {
-        tr: "🚨 Bağlantı hatası oluştu",
-        en: "🚨 Connection error occurred",
-        ru: "🚨 Произошла ошибка соединения"
-      }
+      video_starting: { tr: "🎥 Görüntülü Görüşme Başlatılıyor...", en: "🎥 Starting Video Call...", ru: "🎥 Запуск видеозвонка..." },
+      voice_starting: { tr: "🔊 Sesli Görüşme Başlatılıyor...", en: "🔊 Starting Voice Call...", ru: "🔊 Запуск аудиозвонка..." },
+      sdp_waiting: { tr: "⏳ Yanıt bekleniyor...", en: "⏳ Waiting for answer...", ru: "⏳ Ожидание ответа..." },
+      sdp_failed: { tr: "⚠️ SDP yanıtı alınamadı", en: "⚠️ Failed to get SDP answer", ru: "⚠️ Не удалось получить SDP-ответ" },
+      end_btn: { tr: "Görüşmeyi Bitir", en: "End Call", ru: "Завершить звонок" },
+      ended: { tr: "Görüşme sonlandırıldı.", en: "Call ended.", ru: "Звонок завершен." },
+      conn_error: { tr: "🚨 Bağlantı hatası oluştu", en: "🚨 Connection error occurred", ru: "🚨 Произошла ошибка соединения" }
     };
 
-    // Dil belirleme
     const params = new URLSearchParams(window.location.search);
-    let lang = params.get('lang') || localStorage.getItem('doqrLang') || (navigator.language.startsWith('tr') ? 'tr' : (navigator.language.startsWith('ru') ? 'ru' : 'en'));
+    const session_id = params.get('session_id');
+    const type = params.get('type') || 'voice';
+
+    let call_id = null;
+    const role = 'visitor';
+    let lang = params.get('lang') || localStorage.getItem('doqrLang') || 'tr';
+
+    const localVideo = document.getElementById('localVideo');
+    const remoteVideo = document.getElementById('remoteVideo');
+    let pc;
+
     document.getElementById('langSelect').value = lang;
     document.getElementById('langSelect').onchange = (e) => {
       lang = e.target.value;
@@ -73,48 +61,24 @@
       setTexts();
     };
 
-    // Metinleri güncelleyen fonksiyon
     function setTexts(context = null) {
-      const type = params.get('type');
       const callTitle = document.getElementById('callTitle');
-      if (type === 'voice') {
-        callTitle.innerText = TEXTS.voice_starting[lang];
-      } else {
-        callTitle.innerText = TEXTS.video_starting[lang];
-      }
+      callTitle.innerText = type === 'voice' ? TEXTS.voice_starting[lang] : TEXTS.video_starting[lang];
       document.getElementById('endBtn').textContent = TEXTS.end_btn[lang];
-      if (context === 'ended') {
-        callTitle.innerText = TEXTS.ended[lang];
-      }
-      if (context === 'conn_error') {
-        callTitle.innerText = TEXTS.conn_error[lang];
-      }
-      if (context === 'sdp_failed') {
-        callTitle.innerText = TEXTS.sdp_failed[lang];
-      }
+      if (context && TEXTS[context]) callTitle.innerText = TEXTS[context][lang];
     }
     setTexts();
 
-    // WebRTC & Supabase
-    import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-
-    const session_id = params.get('session_id');
-    const call_id = params.get('call_id');
-    const type = params.get('type');
-
-    const role = 'visitor';
-    const supabase = createClient(
-      'https://npvwenwghmxmrzqbfgbq.supabase.co',
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5wdndlbndnaG14bXJ6cWJmZ2JxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgyMDE1NDMsImV4cCI6MjA2Mzc3NzU0M30.feUs88g74qKEZU57LUF8lIobs_DuEjCZs-PQnHxmhtk'
-    );
-
-    const localVideo = document.getElementById('localVideo');
-    const remoteVideo = document.getElementById('remoteVideo');
-    let pc;
-
-    if (type === 'voice') {
-      remoteVideo.style.display = 'none';
-      localVideo.style.display = 'none';
+    async function sendCallRequest() {
+      const res = await fetch("https://YOUR_PROJECT.functions.supabase.co/send-call-request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id, call_type: type })
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Sunucu hatası");
+      console.log("📤 Çağrı gönderildi:", json);
+      return json.call_id;
     }
 
     async function pollIceCandidates(fromWho) {
@@ -125,7 +89,6 @@
           .select('*')
           .eq('call_ref', call_id)
           .eq('sender', fromWho);
-
         for (const c of candidates || []) {
           const key = c.candidate + c.sdp_mid + c.sdp_mline_index;
           if (seen.has(key)) continue;
@@ -136,7 +99,6 @@
               sdpMid: c.sdp_mid,
               sdpMLineIndex: c.sdp_mline_index
             });
-            console.log('✅ ICE adayı eklendi:', c.candidate);
           } catch (e) {
             console.error('❌ ICE adayı eklenemedi:', e);
           }
@@ -146,8 +108,20 @@
 
     async function init() {
       try {
+        // 🧠 Edge Function çağrısı: çağrıyı başlat
+        call_id = await sendCallRequest();
+
         const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
         pc = new RTCPeerConnection(config);
+
+        if (type === 'voice') {
+          remoteVideo.style.display = 'none';
+          localVideo.style.display = 'none';
+        }
+
+        const stream = await navigator.mediaDevices.getUserMedia({ video: type === 'video', audio: true });
+        stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+        localVideo.srcObject = stream;
 
         pc.onicecandidate = async (event) => {
           if (event.candidate) {
@@ -164,13 +138,6 @@
         pc.ontrack = (e) => {
           remoteVideo.srcObject = e.streams[0];
         };
-
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: type === 'video',
-          audio: true
-        });
-        stream.getTracks().forEach((track) => pc.addTrack(track, stream));
-        localVideo.srcObject = stream;
 
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
@@ -190,20 +157,10 @@
 
           if (data?.sdp_answer) {
             clearInterval(interval);
-            try {
-              await pc.setRemoteDescription({ type: 'answer', sdp: data.sdp_answer });
-              console.log('✅ SDP yanıtı ayarlandı');
-
-              // ICE polling'i burada başlat
-              pollIceCandidates('owner');
-
-            } catch (e) {
-              console.error('❌ SDP yanıtı hatası:', e);
-              setTexts('conn_error');
-            }
+            await pc.setRemoteDescription({ type: 'answer', sdp: data.sdp_answer });
+            pollIceCandidates('owner');
           } else {
             attempt++;
-            console.log(`⏳ SDP yanıtı bekleniyor... (${attempt})`);
             if (attempt >= maxAttempts) {
               clearInterval(interval);
               setTexts('sdp_failed');
@@ -212,35 +169,27 @@
         }, 2000);
 
       } catch (e) {
-        console.error('🚨 Bağlantı hatası:', e);
+        console.error('❌ init error:', e);
         setTexts('conn_error');
       }
     }
 
     async function endCall() {
       try {
-        // Medya akışlarını durdur
         pc?.getSenders().forEach(s => s.track?.stop());
         pc?.close();
-
         localVideo.srcObject?.getTracks().forEach(track => track.stop());
         remoteVideo.srcObject?.getTracks().forEach(track => track.stop());
         localVideo.srcObject = null;
         remoteVideo.srcObject = null;
 
-        // Veritabanında görüşmeyi sonlandır
         const { error } = await supabase
           .from('calls')
           .update({ status: 'ended' })
           .eq('call_id', call_id);
-
-        if (error) {
-          console.warn("⚠️ calls tablosu güncellenemedi:", error);
-        } else {
-          console.log("✅ Görüşme 'ended' olarak güncellendi.");
-        }
+        if (error) console.warn("⚠️ 'ended' güncellenemedi:", error);
       } catch (e) {
-        console.error("❌ endCall hata:", e);
+        console.error("❌ endCall:", e);
       } finally {
         setTexts('ended');
         setTimeout(() => {
@@ -248,12 +197,9 @@
         }, 1000);
       }
     }
+
     window.endCall = endCall;
-
     window.addEventListener("DOMContentLoaded", init);
-
-    // Her dil değişiminde başlık ve buton metni anında güncellenir
-    document.getElementById('langSelect').addEventListener('change', () => setTexts());
   </script>
 </body>
 </html>
