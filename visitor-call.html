@@ -26,7 +26,6 @@
   <script type="module">
     import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-    // 🔧 Supabase Client
     const supabase = createClient(
       'https://npvwenwghmxmrzqbfgbq.supabase.co',
       'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5wdndlbndnaG14bXJ6cWJmZ2JxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgyMDE1NDMsImV4cCI6MjA2Mzc3NzU0M30.feUs88g74qKEZU57LUF8lIobs_DuEjCZs-PQnHxmhtk'
@@ -42,6 +41,7 @@
       conn_error: { tr: "🚨 Bağlantı hatası oluştu", en: "🚨 Connection error occurred", ru: "🚨 Произошла ошибка соединения" }
     };
 
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
     const params = new URLSearchParams(window.location.search);
     const session_id = params.get('session_id');
     const type = params.get('type') || 'voice';
@@ -108,7 +108,6 @@
 
     async function init() {
       try {
-        // 🧠 Edge Function çağrısı: çağrıyı başlat
         call_id = await sendCallRequest();
 
         const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
@@ -119,9 +118,23 @@
           localVideo.style.display = 'none';
         }
 
-        const stream = await navigator.mediaDevices.getUserMedia({ video: type === 'video', audio: true });
-        stream.getTracks().forEach((track) => pc.addTrack(track, stream));
-        localVideo.srcObject = stream;
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ video: type === 'video', audio: true });
+          stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+          localVideo.srcObject = stream;
+
+          if (isIOS) {
+            localVideo.muted = true;
+            await localVideo.play().catch(() => {
+              console.warn("🔇 iOS autoplay engeli - kullanıcı etkileşimi gerekebilir.");
+            });
+          }
+        } catch (err) {
+          console.warn("❗ Kamera/mikrofon erişim hatası:", err);
+          alert("Lütfen kamera ve mikrofona erişime izin verin.");
+          setTexts('conn_error');
+          return;
+        }
 
         pc.onicecandidate = async (event) => {
           if (event.candidate) {
