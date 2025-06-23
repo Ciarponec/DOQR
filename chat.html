@@ -5,118 +5,32 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>DOQR - Chat</title>
   <style>
-    body {
-      background: #f3f3f3;
-      font-family: 'Inter', Arial, sans-serif;
-      margin: 0;
-      padding: 0;
-    }
-    #chatbox {
-      max-width: 450px;
-      margin: 24px auto;
-      background: #fff;
-      border-radius: 18px;
-      box-shadow: 0 4px 28px rgba(0,0,0,0.07), 0 1.5px 4px rgba(0,0,0,0.07);
-      padding: 18px;
-      display: flex;
-      flex-direction: column;
-      min-height: 60vh;
-    }
-    #messages {
-      flex: 1;
-      max-height: 350px;
-      overflow-y: auto;
-      margin-bottom: 18px;
-      padding-right: 4px;
-    }
-    .message-row {
-      display: flex;
-      align-items: flex-end;
-      margin-bottom: 10px;
-    }
-    .avatar {
-      width: 36px; height: 36px;
-      border-radius: 50%;
-      background: #d6d6d6;
+    body { background: #f3f3f3; font-family: 'Inter', Arial, sans-serif; margin: 0; padding: 0; }
+    #chatbox { max-width: 450px; margin: 24px auto; background: #fff; border-radius: 18px;
+      box-shadow: 0 4px 28px rgba(0,0,0,0.07), 0 1.5px 4px rgba(0,0,0,0.07); padding: 18px;
+      display: flex; flex-direction: column; min-height: 60vh; }
+    #messages { flex: 1; max-height: 350px; overflow-y: auto; margin-bottom: 18px; padding-right: 4px; }
+    .message-row { display: flex; align-items: flex-end; margin-bottom: 10px; }
+    .avatar { width: 36px; height: 36px; border-radius: 50%; background: #d6d6d6;
       display: flex; align-items: center; justify-content: center;
-      font-weight: bold; color: #fff; font-size: 17px;
-      margin-right: 10px;
-      flex-shrink: 0;
-    }
-    .message-bubble {
-      padding: 11px 14px;
-      border-radius: 14px;
-      background: #e2f0fd;
-      color: #212121;
-      font-size: 15px;
-      max-width: 70vw;
-      min-width: 40px;
-      word-break: break-word;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.07);
-      position: relative;
-    }
-    .from-owner .message-bubble {
-      background: #1976d2;
-      color: #fff;
-    }
-    .from-owner {
-      flex-direction: row-reverse;
-    }
-    .from-owner .avatar {
-      background: #1976d2;
-      margin-left: 10px;
-      margin-right: 0;
-    }
-    .from-visitor .avatar {
-      background: #6c757d;
-    }
-    .msg-meta {
-      font-size: 11px;
-      color: #7e7e7e;
-      margin-top: 3px;
-      text-align: right;
-    }
-    #inputRow {
-      display: flex; gap: 10px; margin-top: 7px;
-    }
-    #messageInput {
-      flex: 1;
-      padding: 11px;
-      font-size: 16px;
-      border-radius: 9px;
-      border: 1px solid #ccc;
-      outline: none;
-      background: #fafbfc;
-      transition: border 0.2s;
-    }
-    #messageInput:focus {
-      border: 1.2px solid #1976d2;
-    }
-    #sendBtn {
-      padding: 11px 18px;
-      border-radius: 9px;
-      background: #1976d2;
-      color: #fff;
-      font-weight: bold;
-      border: none;
-      cursor: pointer;
-      font-size: 16px;
-      transition: background 0.2s;
-    }
-    #sendBtn:disabled {
-      background: #b5b5b5;
-      cursor: not-allowed;
-    }
-    #chatTitle {
-      text-align: center; margin-bottom: 15px; font-size: 19px; color: #1976d2; letter-spacing: .1em;
-    }
-    #langSelect {
-      position: absolute;
-      top: 14px;
-      right: 20px;
-      z-index: 99;
-      font-size: 16px;
-    }
+      font-weight: bold; color: #fff; font-size: 17px; margin-right: 10px; flex-shrink: 0; }
+    .message-bubble { padding: 11px 14px; border-radius: 14px; background: #e2f0fd; color: #212121;
+      font-size: 15px; max-width: 70vw; min-width: 40px; word-break: break-word;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.07); position: relative; }
+    .from-owner .message-bubble { background: #1976d2; color: #fff; }
+    .from-owner { flex-direction: row-reverse; }
+    .from-owner .avatar { background: #1976d2; margin-left: 10px; margin-right: 0; }
+    .from-visitor .avatar { background: #6c757d; }
+    .msg-meta { font-size: 11px; color: #7e7e7e; margin-top: 3px; text-align: right; }
+    #inputRow { display: flex; gap: 10px; margin-top: 7px; }
+    #messageInput { flex: 1; padding: 11px; font-size: 16px; border-radius: 9px;
+      border: 1px solid #ccc; outline: none; background: #fafbfc; transition: border 0.2s; }
+    #messageInput:focus { border: 1.2px solid #1976d2; }
+    #sendBtn { padding: 11px 18px; border-radius: 9px; background: #1976d2; color: #fff;
+      font-weight: bold; border: none; cursor: pointer; font-size: 16px; transition: background 0.2s; }
+    #sendBtn:disabled { background: #b5b5b5; cursor: not-allowed; }
+    #chatTitle { text-align: center; margin-bottom: 15px; font-size: 19px; color: #1976d2; letter-spacing: .1em; }
+    #langSelect { position: absolute; top: 14px; right: 20px; z-index: 99; font-size: 16px; }
   </style>
 </head>
 <body>
@@ -137,84 +51,42 @@
   <script type="module">
     import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-    // Dil sözlüğü
     const TEXTS = {
-      chat_title: {
-        tr: "💬 DOQR Sohbet",
-        en: "💬 DOQR Chat",
-        ru: "💬 DOQR Чат"
-      },
-      msg_placeholder: {
-        tr: "Mesaj yazın...",
-        en: "Type a message...",
-        ru: "Напишите сообщение..."
-      },
-      send: {
-        tr: "Gönder",
-        en: "Send",
-        ru: "Отправить"
-      },
-      error_no_session: {
-        tr: "Session ID yok.",
-        en: "No session ID.",
-        ru: "Нет идентификатора сессии."
-      },
-      error_load: {
-        tr: "Mesajlar yüklenemedi.",
-        en: "Failed to load messages.",
-        ru: "Не удалось загрузить сообщения."
-      },
-      error_send: {
-        tr: "Mesaj gönderilemedi.",
-        en: "Failed to send message.",
-        ru: "Не удалось отправить сообщение."
-      },
-      error_network: {
-        tr: "Ağ hatası: ",
-        en: "Network error: ",
-        ru: "Сетевая ошибка: "
-      }
+      chat_title: { tr: "💬 DOQR Sohbet", en: "💬 DOQR Chat", ru: "💬 DOQR Чат" },
+      msg_placeholder: { tr: "Mesaj yazın...", en: "Type a message...", ru: "Напишите сообщение..." },
+      send: { tr: "Gönder", en: "Send", ru: "Отправить" },
+      error_no_session: { tr: "Session ID yok.", en: "No session ID.", ru: "Нет идентификатора сессии." },
+      error_send: { tr: "Mesaj gönderilemedi.", en: "Failed to send message.", ru: "Не удалось отправить сообщение." },
+      error_network: { tr: "Ağ hatası: ", en: "Network error: ", ru: "Сетевая ошибка: " }
     };
 
-    // Parametreler
     const params = new URLSearchParams(window.location.search);
     const session_id = params.get('session_id');
-    let sender = params.get('sender') || 'visitor'; // default visitor, owner için &sender=owner ekle
+    let sender = params.get('sender') || 'visitor';
 
-    // Dil parametresi ve seçimi
     let lang = params.get('lang') || localStorage.getItem('doqrLang') || (navigator.language.startsWith('tr') ? 'tr' : (navigator.language.startsWith('ru') ? 'ru' : 'en'));
     document.getElementById('langSelect').value = lang;
-
     document.getElementById('langSelect').onchange = (e) => {
       lang = e.target.value;
       localStorage.setItem('doqrLang', lang);
       setTexts();
     };
 
-    // Avatar harfleri
-    const AVATAR_LETTERS = { owner: 'E', visitor: 'Z' }; // Ev sahibi, Ziyaretçi
-
-    // Supabase ayarları
-    const supabase = createClient(
-      'https://npvwenwghmxmrzqbfgbq.supabase.co',
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5wdndlbndnaG14bXJ6cWJmZ2JxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgyMDE1NDMsImV4cCI6MjA2Mzc3NzU0M30.feUs88g74qKEZU57LUF8lIobs_DuEjCZs-PQnHxmhtk'
-    );
+    const AVATAR_LETTERS = { owner: 'E', visitor: 'Z' };
+    const supabase = createClient('https://npvwenwghmxmrzqbfgbq.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5wdndlbndnaG14bXJ6cWJmZ2JxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgyMDE1NDMsImV4cCI6MjA2Mzc3NzU0M30.feUs88g74qKEZU57LUF8lIobs_DuEjCZs-PQnHxmhtk');
 
     const chatTitleDiv = document.getElementById('chatTitle');
     const messagesDiv = document.getElementById('messages');
     const input = document.getElementById('messageInput');
     const sendBtn = document.getElementById('sendBtn');
 
-    // Metinleri güncelle
     function setTexts() {
       chatTitleDiv.textContent = TEXTS.chat_title[lang];
       input.placeholder = TEXTS.msg_placeholder[lang];
       sendBtn.textContent = TEXTS.send[lang];
-      // Eğer hata varsa çevirisini güncellemek için loadMessages()'ı çağırabiliriz.
     }
     setTexts();
 
-    // Saat biçimi
     function formatTime(dtString) {
       try {
         const d = new Date(dtString);
@@ -224,63 +96,45 @@
       }
     }
 
-    // Mesajları yükle
-    async function loadMessages() {
+    function appendMessage(msg) {
+      const from = msg.sender === 'owner' ? 'from-owner' : 'from-visitor';
+      const row = document.createElement('div');
+      row.className = `message-row ${from}`;
+      const avatarDiv = document.createElement('div');
+      avatarDiv.className = 'avatar';
+      avatarDiv.textContent = AVATAR_LETTERS[msg.sender] || msg.sender[0].toUpperCase();
+      const bubble = document.createElement('div');
+      bubble.className = 'message-bubble';
+      bubble.innerHTML = `<span>${msg.text}</span><div class="msg-meta">${formatTime(msg.created_at)}</div>`;
+      row.appendChild(avatarDiv);
+      row.appendChild(bubble);
+      messagesDiv.appendChild(row);
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    async function initialLoad() {
       if (!session_id) {
         messagesDiv.innerHTML = `<div style="color:#e74c3c;text-align:center;">${TEXTS.error_no_session[lang]}</div>`;
         return;
       }
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('chat_messages')
         .select('*')
         .eq('session_ref', session_id)
         .order('created_at', { ascending: true });
-
-      if (error) {
-        messagesDiv.innerHTML = `<div style="color:#e74c3c;text-align:center;">${TEXTS.error_load[lang]}</div>`;
-        return;
-      }
-
-      messagesDiv.innerHTML = '';
-      (data || []).forEach(msg => {
-        const from = msg.sender === 'owner' ? 'from-owner' : 'from-visitor';
-        const row = document.createElement('div');
-        row.className = `message-row ${from}`;
-        // Avatar
-        const avatarDiv = document.createElement('div');
-        avatarDiv.className = `avatar`;
-        avatarDiv.textContent = AVATAR_LETTERS[msg.sender] || msg.sender[0].toUpperCase();
-
-        // Balon
-        const bubble = document.createElement('div');
-        bubble.className = 'message-bubble';
-        bubble.innerHTML = `<span>${msg.text}</span>
-            <div class="msg-meta">${formatTime(msg.created_at)}</div>`;
-
-        // Sıra (owner sağa, visitor sola)
-        row.appendChild(avatarDiv);
-        row.appendChild(bubble);
-        messagesDiv.appendChild(row);
-      });
-
-      // Otomatik scroll
-      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+      (data || []).forEach(appendMessage);
     }
 
-    // Edge function ile mesaj gönder
     async function sendMessage() {
       const text = input.value.trim();
       if (!text || !session_id) return;
       sendBtn.disabled = true;
       try {
-        const resp = await fetch(
-          'https://npvwenwghmxmrzqbfgbq.functions.supabase.co/send-chat-message',
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ session_id, sender, text })
-          }
-        );
+        const resp = await fetch('https://npvwenwghmxmrzqbfgbq.functions.supabase.co/send-chat-message', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id, sender, text })
+        });
         const res = await resp.json();
         if (!resp.ok || !res.success) {
           alert(res.error || TEXTS.error_send[lang]);
@@ -288,56 +142,40 @@
           input.value = '';
         }
       } catch (e) {
-        alert(TEXTS.error_network[lang] + (e.message));
+        alert(TEXTS.error_network[lang] + e.message);
       }
       sendBtn.disabled = false;
     }
 
-    // Gönder tuşu ile mesaj gönder
     sendBtn.onclick = sendMessage;
+    input.addEventListener('keyup', (e) => { if (e.key === 'Enter') sendMessage(); });
+    initialLoad();
 
-    // Enter ile mesaj gönder
-    input.addEventListener('keyup', (e) => {
-      if (e.key === 'Enter') sendMessage();
-    });
+    supabase.channel('chat_channel')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'chat_messages',
+        filter: `session_ref=eq.${session_id}`
+      }, payload => {
+        appendMessage(payload.new);
+      }).subscribe();
 
-    // Sayfa yüklenince mesajları yükle
-    loadMessages();
-
-    // Dil değiştiğinde tekrar mesajları ve başlığı güncelle
-    document.getElementById('langSelect').addEventListener('change', loadMessages);
-
-    // Supabase Realtime ile yeni mesajları dinle
-supabase.channel('chat_channel')
-  .on('postgres_changes', {
-    event: 'INSERT',
-    schema: 'public',
-    table: 'chat_messages',
-    filter: `session_ref=eq.${session_id}`
-  }, payload => {
-    const msg = payload.new;
-    const from = msg.sender === 'owner' ? 'from-owner' : 'from-visitor';
-    const row = document.createElement('div');
-    row.className = `message-row ${from}`;
-
-    const avatarDiv = document.createElement('div');
-    avatarDiv.className = `avatar`;
-    avatarDiv.textContent = AVATAR_LETTERS[msg.sender] || msg.sender[0].toUpperCase();
-
-    const bubble = document.createElement('div');
-    bubble.className = 'message-bubble';
-    bubble.innerHTML = `<span>${msg.text}</span>
-        <div class="msg-meta">${formatTime(msg.created_at)}</div>`;
-
-    row.appendChild(avatarDiv);
-    row.appendChild(bubble);
-    messagesDiv.appendChild(row);
-
-    messagesDiv.scrollTop = messagesDiv.scrollHeight;
-  })
-  .subscribe();
-
-
+    supabase.channel('call_channel')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'calls',
+        filter: `session_id=eq.${session_id}`
+      }, payload => {
+        const call = payload.new;
+        if (!call.ended) {
+          alert(`📞 Yeni ${call.type === 'video' ? 'görüntülü' : 'sesli'} çağrı geldi!`);
+          // İstersen buradan call.html sayfasına yönlendirme ekle:
+          // window.location.href = `call.html?session_id=${session_id}&call_id=${call.id}&type=${call.type}`;
+        }
+      }).subscribe();
   </script>
 </body>
 </html>
+
