@@ -43,7 +43,8 @@
   </div>
 
   <script>
-    // Çok dilli metinler:
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+
     const TEXTS = {
       title: {
         tr: "🔔 Zili Çal",
@@ -132,7 +133,6 @@
       }
     };
 
-    // Varsayılan dil: localStorage ya da tarayıcı dili
     let lang = localStorage.getItem('doqrLang') || (navigator.language.startsWith('tr') ? 'tr' : (navigator.language.startsWith('ru') ? 'ru' : 'en'));
     document.getElementById('langSelect').value = lang;
 
@@ -187,7 +187,18 @@
         status.innerHTML = TEXTS.status_success[lang];
         document.getElementById('communication-options').classList.remove('hidden');
 
-        // Chat yönlendirmesi
+        // ✅ iOS izin tetikleyici
+        if (isIOS) {
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            stream.getTracks().forEach(track => track.stop());
+            console.log("📷 iOS izinler başarıyla alındı.");
+          } catch (e) {
+            console.warn("❗️iOS getUserMedia izni alınamadı:", e);
+            alert("iOS cihazınızda kamera ve mikrofon erişimine izin verin.");
+          }
+        }
+
         document.getElementById('chatBtn').onclick = () => {
           window.location.href = `chat.html?session_id=${sessionId}&lang=${lang}`;
         };
