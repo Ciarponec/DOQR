@@ -51,6 +51,7 @@
   <script type="module">
     import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
     const TEXTS = {
       chat_title: { tr: "💬 DOQR Sohbet", en: "💬 DOQR Chat", ru: "💬 DOQR Чат" },
       msg_placeholder: { tr: "Mesaj yazın...", en: "Type a message...", ru: "Напишите сообщение..." },
@@ -109,7 +110,12 @@
       row.appendChild(avatarDiv);
       row.appendChild(bubble);
       messagesDiv.appendChild(row);
+
+      // Scroll güncellemesi (iOS için gecikmeli)
       messagesDiv.scrollTop = messagesDiv.scrollHeight;
+      setTimeout(() => {
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+      }, isIOS ? 250 : 0);
     }
 
     async function initialLoad() {
@@ -149,6 +155,16 @@
 
     sendBtn.onclick = sendMessage;
     input.addEventListener('keyup', (e) => { if (e.key === 'Enter') sendMessage(); });
+
+    // ✅ iOS için input scroll düzeltmesi
+    if (isIOS) {
+      input.addEventListener('focus', () => {
+        setTimeout(() => {
+          input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 300);
+      });
+    }
+
     initialLoad();
 
     supabase.channel('chat_channel')
@@ -171,11 +187,8 @@
         const call = payload.new;
         if (!call.ended) {
           alert(`📞 Yeni ${call.type === 'video' ? 'görüntülü' : 'sesli'} çağrı geldi!`);
-          // İstersen buradan call.html sayfasına yönlendirme ekle:
-          // window.location.href = `call.html?session_id=${session_id}&call_id=${call.id}&type=${call.type}`;
         }
       }).subscribe();
   </script>
 </body>
 </html>
-
