@@ -57,7 +57,6 @@
       const callTitle = document.getElementById('callTitle');
       if (type === 'voice') callTitle.innerText = TEXTS.voice_answering[lang];
       else callTitle.innerText = TEXTS.video_answering[lang];
-
       document.getElementById('endBtn').textContent = TEXTS.end_btn[lang];
       if (context && TEXTS[context]) callTitle.innerText = TEXTS[context][lang];
     }
@@ -70,7 +69,7 @@
 
     const localVideo = document.getElementById('localVideo');
     const remoteVideo = document.getElementById('remoteVideo');
-    let pc;
+    let pc, localStream;
 
     if (!call_id) {
       document.getElementById('callTitle').innerText = '❌ call_id eksik!';
@@ -110,6 +109,15 @@
 
     async function init() {
       try {
+        // 1. Kamera ve mikrofonu en başta aç
+        localStream = await navigator.mediaDevices.getUserMedia({ video: type === 'video', audio: true });
+        localVideo.srcObject = localStream;
+        if (isIOS) {
+          localVideo.muted = true;
+          await localVideo.play().catch(() => console.warn("🔇 iOS autoplay engeli (owner)."));
+        }
+
+        // 2. WebRTC bağlantısı kur
         const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
         pc = new RTCPeerConnection(config);
 
@@ -129,8 +137,10 @@
           remoteVideo.srcObject = e.streams[0];
         };
 
+        localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
+
         let attempt = 0;
-        const maxAttempts = 20;
+        const maxAttempts = 15;
         const interval = setInterval(async () => {
           attempt++;
           const { data, error } = await supabase
@@ -140,16 +150,6 @@
             .single();
           if (data?.sdp_offer) {
             clearInterval(interval);
-            const stream = await navigator.mediaDevices.getUserMedia({ video: type === 'video', audio: true });
-            stream.getTracks().forEach((track) => pc.addTrack(track, stream));
-            localVideo.srcObject = stream;
-
-            if (isIOS) {
-              localVideo.muted = true;
-              await localVideo.play().catch(() => {
-                console.warn("🔇 iOS autoplay engeli (owner).");
-              });
-            }
 
             await pc.setRemoteDescription({ type: 'offer', sdp: data.sdp_offer });
             const answer = await pc.createAnswer();
@@ -167,7 +167,7 @@
               setTexts('sdp_failed');
             }
           }
-        }, 2000);
+        }, 500);
       } catch (e) {
         console.error('🚨 init error:', e);
         setTexts('conn_error');
@@ -178,7 +178,7 @@
       try {
         pc?.getSenders().forEach(s => s.track?.stop());
         pc?.close();
-        localVideo.srcObject?.getTracks().forEach(track => track.stop());
+        localStream?.getTracks().forEach(track => track.stop());
         remoteVideo.srcObject?.getTracks().forEach(track => track.stop());
         localVideo.srcObject = null;
         remoteVideo.srcObject = null;
