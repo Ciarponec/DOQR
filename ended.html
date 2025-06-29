@@ -18,6 +18,7 @@
       cursor: pointer;
     }
     #langSelect { position: absolute; right: 20px; top: 16px; font-size: 16px; }
+    #fallbackMsg { margin-top: 1em; color: #888; font-size: 15px; display: none; }
   </style>
 </head>
 <body>
@@ -28,7 +29,8 @@
   </select>
   <h1 id="endTitle">📴 Görüşme Sonlandırıldı</h1>
   <p id="endMsg">Görüşmeniz başarıyla sona erdi.</p>
-  <button id="closeBtn" onclick="window.close()">Sekmeyi Kapat</button>
+  <button id="closeBtn">Sekmeyi Kapat</button>
+  <p id="fallbackMsg">Sekme otomatik olarak kapanmazsa tarayıcınızdan manuel olarak kapatabilirsiniz.</p>
 
   <script>
     const TEXTS = {
@@ -46,10 +48,14 @@
         tr: "Sekmeyi Kapat",
         en: "Close Tab",
         ru: "Закрыть вкладку"
+      },
+      fallback: {
+        tr: "Sekme otomatik olarak kapanmazsa tarayıcınızdan manuel olarak kapatabilirsiniz.",
+        en: "If the tab doesn't close automatically, please close it manually from your browser.",
+        ru: "Если вкладка не закроется автоматически, закройте её вручную в браузере."
       }
     };
 
-    // Dil parametresi ya da localStorage
     const params = new URLSearchParams(window.location.search);
     let lang = params.get('lang') || localStorage.getItem('doqrLang') || (navigator.language.startsWith('tr') ? 'tr' : (navigator.language.startsWith('ru') ? 'ru' : 'en'));
     document.getElementById('langSelect').value = lang;
@@ -58,6 +64,7 @@
       document.getElementById('endTitle').textContent = TEXTS.end_title[lang];
       document.getElementById('endMsg').textContent = TEXTS.end_msg[lang];
       document.getElementById('closeBtn').textContent = TEXTS.close_btn[lang];
+      document.getElementById('fallbackMsg').textContent = TEXTS.fallback[lang];
     }
     setTexts();
 
@@ -65,6 +72,14 @@
       lang = e.target.value;
       localStorage.setItem('doqrLang', lang);
       setTexts();
+    };
+
+    document.getElementById('closeBtn').onclick = () => {
+      const closed = window.close();
+      // iOS/Safari engellerse fallback göster
+      setTimeout(() => {
+        document.getElementById('fallbackMsg').style.display = 'block';
+      }, 300);
     };
   </script>
 </body>
