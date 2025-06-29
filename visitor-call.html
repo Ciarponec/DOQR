@@ -32,7 +32,7 @@
 
     const supabase = createClient(
       'https://npvwenwghmxmrzqbfgbq.supabase.co',
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' // Kendi anon key'inle değiştir
     );
 
     const TEXTS = {
@@ -123,13 +123,22 @@
           remoteVideo.style.display = 'none';
         }
 
-        const stream = await navigator.mediaDevices.getUserMedia({ video: type === 'video', audio: true });
+        let stream;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ video: type === 'video', audio: true });
+        } catch (err) {
+          console.error("📷 Kamera veya mikrofon erişim hatası:", err);
+          setTexts('conn_error');
+          return;
+        }
+
         stream.getTracks().forEach((track) => pc.addTrack(track, stream));
         localVideo.srcObject = stream;
+        await localVideo.play().catch((err) => console.warn("🎥 play() hatası", err));
 
         if (isIOS) {
           localVideo.muted = true;
-          await localVideo.play().catch(() => console.warn("🔇 iOS autoplay engeli"));
+          localVideo.load();
         }
 
         pc.onicecandidate = async (event) => {
@@ -152,7 +161,6 @@
         await pc.setLocalDescription(offer);
         await supabase.from('calls').update({ sdp_offer: offer.sdp }).eq('call_id', call_id);
 
-        // SDP Answer bekle
         let attempt = 0;
         const maxAttempts = 15;
         const interval = setInterval(async () => {
