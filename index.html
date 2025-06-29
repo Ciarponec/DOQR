@@ -2,7 +2,7 @@
 <html lang="tr">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"/>
   <title>DOQR - Zili Çal</title>
   <style>
     body { font-family: sans-serif; text-align: center; padding: 2em; margin: 0; }
@@ -163,31 +163,40 @@
       const urlParams = new URLSearchParams(window.location.search);
       const qr_token = urlParams.get('qr');
       const status = document.getElementById('status');
+      const ringBtn = document.getElementById('ringBtn');
 
+      ringBtn.disabled = true;
       status.textContent = TEXTS.status_sending[lang];
-      if (!qr_token) return status.textContent = TEXTS.status_noqr[lang];
+
+      if (!qr_token) {
+        ringBtn.disabled = false;
+        return status.textContent = TEXTS.status_noqr[lang];
+      }
 
       const payload = { qr_token, visitor_name: name || null, visitor_message: message || null };
+
       try {
         const res = await fetch('https://npvwenwghmxmrzqbfgbq.supabase.co/functions/v1/block-check-enabled-ring', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
+
         const result = await res.json();
         if (!res.ok || !result.success) {
+          ringBtn.disabled = false;
           return status.textContent = `❌ ${result.error || 'Zil çalma başarısız.'}`;
         }
+
         sessionId = result.session_id;
         if (typeof FFAppState !== 'undefined' && FFAppState().hasOwnProperty('sessionId')) {
           FFAppState().sessionId = sessionId;
           console.log('📦 AppState.sessionId set edildi:', sessionId);
         }
-        console.log('🆔 sessionId:', sessionId);
+
         status.innerHTML = TEXTS.status_success[lang];
         document.getElementById('communication-options').classList.remove('hidden');
 
-        // ✅ iOS izin tetikleyici
         if (isIOS) {
           try {
             const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
@@ -203,14 +212,12 @@
           window.location.href = `chat.html?session_id=${sessionId}&lang=${lang}`;
         };
 
-        // İzin kontrolü
         fetch('https://npvwenwghmxmrzqbfgbq.supabase.co/functions/v1/check-user-permissions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ session_id: sessionId })
         })
         .then(r => r.json()).then(data => {
-          console.log('🔐 permissions:', data);
           if (data.allow_voice_call) {
             const v = document.getElementById('voiceBtn');
             v.classList.remove('hidden');
@@ -224,6 +231,7 @@
         }).catch(e => console.error('İzinler alınamadı:', e));
 
       } catch (e) {
+        ringBtn.disabled = false;
         status.textContent = TEXTS.net_error[lang] + (e.message || e);
       }
     }
@@ -241,7 +249,9 @@
         if (res.ok && result.success) {
           status.textContent = TEXTS.call_sent[lang];
           const callId = result.call_id;
-          window.location.href = `visitor-call.html?session_id=${sessionId}&call_id=${callId}&type=${type}&lang=${lang}`;
+          setTimeout(() => {
+            window.location.href = `visitor-call.html?session_id=${sessionId}&call_id=${callId}&type=${type}&lang=${lang}`;
+          }, 150);
         } else {
           status.textContent = result.error ? `❌ ${result.error}` : TEXTS.comm_error[lang];
         }
