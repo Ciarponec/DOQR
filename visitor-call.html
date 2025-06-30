@@ -6,10 +6,8 @@
   <title>DOQR - Ziyaretçi Görüşme</title>
   <style>
     body { font-family: sans-serif; text-align: center; background: #f0f0f0; padding: 2em; }
-    video { width: 100%; max-height: 200px; margin-bottom: 1em; border-radius: 12px; background: black; }
     button { padding: 1em 2em; font-size: 16px; border-radius: 8px; border: none; background: #1976d2; color: white; }
     #langSelect { position: absolute; right: 20px; top: 16px; font-size: 16px; }
-    #startBtn { margin-bottom: 1em; }
   </style>
 </head>
 <body>
@@ -18,13 +16,10 @@
     <option value="en">🇬🇧 English</option>
     <option value="ru">🇷🇺 Русский</option>
   </select>
-  <h2 id="callTitle">📞 Görüşme Başlatılmaya Hazır</h2>
+  <h2 id="callTitle">🔊 Sesli Görüşmeye Hazır</h2>
 
   <button id="startBtn" onclick="startCall()">Görüşmeyi Başlat</button>
-
-  <video id="localVideo" autoplay muted playsinline></video>
-  <video id="remoteVideo" autoplay playsinline></video>
-  <br />
+  <br /><br />
   <button id="endBtn" onclick="endCall()" style="display:none">Görüşmeyi Bitir</button>
 
   <script type="module">
@@ -32,11 +27,10 @@
 
     const supabase = createClient(
       'https://npvwenwghmxmrzqbfgbq.supabase.co',
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' // Kendi anon key'inle değiştir
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5wdndlbndnaG14bXJ6cWJmZ2JxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgyMDE1NDMsImV4cCI6MjA2Mzc3NzU0M30.feUs88g74qKEZU57LUF8lIobs_DuEjCZs-PQnHxmhtk'
     );
 
     const TEXTS = {
-      video_starting: { tr: "🎥 Görüntülü Görüşme Başlatılıyor...", en: "🎥 Starting Video Call...", ru: "🎥 Запуск видеозвонка..." },
       voice_starting: { tr: "🔊 Sesli Görüşme Başlatılıyor...", en: "🔊 Starting Voice Call...", ru: "🔊 Запуск аудиозвонка..." },
       sdp_waiting: { tr: "⏳ Yanıt bekleniyor...", en: "⏳ Waiting for answer...", ru: "⏳ Ожидание ответа..." },
       sdp_failed: { tr: "⚠️ Yanıt alınamadı", en: "⚠️ No answer received", ru: "⚠️ Ответ не получен" },
@@ -48,16 +42,11 @@
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
     const params = new URLSearchParams(window.location.search);
     const session_id = params.get('session_id');
-    const type = params.get('type') || 'voice';
     let lang = params.get('lang') || localStorage.getItem('doqrLang') || 'tr';
     let call_id = null;
     const role = 'visitor';
 
-    const localVideo = document.getElementById('localVideo');
-    const remoteVideo = document.getElementById('remoteVideo');
     const callTitle = document.getElementById('callTitle');
-    let pc;
-
     document.getElementById('langSelect').value = lang;
     document.getElementById('langSelect').onchange = (e) => {
       lang = e.target.value;
@@ -66,7 +55,7 @@
     };
 
     function setTexts(context = null) {
-      callTitle.innerText = type === 'voice' ? TEXTS.voice_starting[lang] : TEXTS.video_starting[lang];
+      callTitle.innerText = TEXTS.voice_starting[lang];
       document.getElementById('endBtn').textContent = TEXTS.end_btn[lang];
       if (context && TEXTS[context]) callTitle.innerText = TEXTS[context][lang];
     }
@@ -75,14 +64,14 @@
       const res = await fetch("https://npvwenwghmxmrzqbfgbq.supabase.co/functions/v1/send-call-request", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ session_id, call_type: type })
+        body: JSON.stringify({ session_id, call_type: "voice" })
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Sunucu hatası");
       return json.call_id;
     }
 
-    async function pollIceCandidates(fromWho) {
+    async function pollIceCandidates(fromWho, pc) {
       let seen = new Set();
       setInterval(async () => {
         const { data: candidates } = await supabase
@@ -116,30 +105,18 @@
         call_id = await sendCallRequest();
 
         const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
-        pc = new RTCPeerConnection(config);
-
-        if (type === 'voice') {
-          localVideo.style.display = 'none';
-          remoteVideo.style.display = 'none';
-        }
+        const pc = new RTCPeerConnection(config);
 
         let stream;
         try {
-          stream = await navigator.mediaDevices.getUserMedia({ video: type === 'video', audio: true });
+          stream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
         } catch (err) {
-          console.error("📷 Kamera veya mikrofon erişim hatası:", err);
+          console.error("🎙 Mikrofon erişim hatası:", err);
           setTexts('conn_error');
           return;
         }
 
         stream.getTracks().forEach((track) => pc.addTrack(track, stream));
-        localVideo.srcObject = stream;
-        await localVideo.play().catch((err) => console.warn("🎥 play() hatası", err));
-
-        if (isIOS) {
-          localVideo.muted = true;
-          localVideo.load();
-        }
 
         pc.onicecandidate = async (event) => {
           if (event.candidate) {
@@ -151,10 +128,6 @@
               sender: role
             });
           }
-        };
-
-        pc.ontrack = (e) => {
-          remoteVideo.srcObject = e.streams[0];
         };
 
         const offer = await pc.createOffer();
@@ -173,7 +146,7 @@
           if (data?.sdp_answer) {
             clearInterval(interval);
             await pc.setRemoteDescription({ type: 'answer', sdp: data.sdp_answer });
-            pollIceCandidates('owner');
+            pollIceCandidates('owner', pc);
           } else {
             attempt++;
             if (attempt >= maxAttempts) {
@@ -182,6 +155,8 @@
             }
           }
         }, 500);
+
+        window.pc = pc;
       } catch (e) {
         console.error('❌ startCall error:', e);
         setTexts('conn_error');
@@ -190,12 +165,8 @@
 
     async function endCall() {
       try {
-        pc?.getSenders().forEach(s => s.track?.stop());
-        pc?.close();
-        localVideo.srcObject?.getTracks().forEach(track => track.stop());
-        remoteVideo.srcObject?.getTracks().forEach(track => track.stop());
-        localVideo.srcObject = null;
-        remoteVideo.srcObject = null;
+        window.pc?.getSenders().forEach(s => s.track?.stop());
+        window.pc?.close();
 
         await supabase.from('calls').update({ status: 'ended' }).eq('call_id', call_id);
       } catch (e) {
