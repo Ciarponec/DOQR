@@ -58,7 +58,12 @@
       send: { tr: "Gönder", en: "Send", ru: "Отправить" },
       error_no_session: { tr: "Session ID yok.", en: "No session ID.", ru: "Нет идентификатора сессии." },
       error_send: { tr: "Mesaj gönderilemedi.", en: "Failed to send message.", ru: "Не удалось отправить сообщение." },
-      error_network: { tr: "Ağ hatası: ", en: "Network error: ", ru: "Сетевая ошибка: " }
+      error_network: { tr: "Ağ hatası: ", en: "Network error: ", ru: "Сетевая ошибка: " },
+      incoming_call: {
+        tr: "📞 Yeni sesli çağrı geldi!",
+        en: "📞 New voice call received!",
+        ru: "📞 Новый аудиозвонок!"
+      }
     };
 
     const params = new URLSearchParams(window.location.search);
@@ -74,7 +79,7 @@
     };
 
     const AVATAR_LETTERS = { owner: 'E', visitor: 'Z' };
-    const supabase = createClient('https://npvwenwghmxmrzqbfgbq.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5wdndlbndnaG14bXJ6cWJmZ2JxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgyMDE1NDMsImV4cCI6MjA2Mzc3NzU0M30.feUs88g74qKEZU57LUF8lIobs_DuEjCZs-PQnHxmhtk');
+    const supabase = createClient('https://npvwenwghmxmrzqbfgbq.supabase.co', 'public-anon-key'); // ⚠️ Değiştir!
 
     const chatTitleDiv = document.getElementById('chatTitle');
     const messagesDiv = document.getElementById('messages');
@@ -111,7 +116,6 @@
       row.appendChild(bubble);
       messagesDiv.appendChild(row);
 
-      // Scroll güncellemesi (iOS için gecikmeli)
       messagesDiv.scrollTop = messagesDiv.scrollHeight;
       setTimeout(() => {
         messagesDiv.scrollTop = messagesDiv.scrollHeight;
@@ -156,7 +160,6 @@
     sendBtn.onclick = sendMessage;
     input.addEventListener('keyup', (e) => { if (e.key === 'Enter') sendMessage(); });
 
-    // ✅ iOS için input scroll düzeltmesi
     if (isIOS) {
       input.addEventListener('focus', () => {
         setTimeout(() => {
@@ -185,8 +188,8 @@
         filter: `session_id=eq.${session_id}`
       }, payload => {
         const call = payload.new;
-        if (!call.ended) {
-          alert(`📞 Yeni ${call.type === 'video' ? 'görüntülü' : 'sesli'} çağrı geldi!`);
+        if (!call.ended && call.type === 'voice') {
+          alert(TEXTS.incoming_call[lang]);
         }
       }).subscribe();
   </script>
