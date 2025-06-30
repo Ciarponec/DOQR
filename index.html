@@ -82,63 +82,71 @@
     let sessionId = null;
 
     async function ringBell() {
-      const name = document.getElementById('visitorName').value;
-      const message = document.getElementById('visitorMessage').value;
-      const qr_token = new URLSearchParams(window.location.search).get('qr');
-      const status = document.getElementById('status');
-      const ringBtn = document.getElementById('ringBtn');
+  const name = document.getElementById('visitorName').value;
+  const message = document.getElementById('visitorMessage').value;
+  const qr_token = new URLSearchParams(window.location.search).get('qr');
+  const status = document.getElementById('status');
+  const ringBtn = document.getElementById('ringBtn');
 
-      ringBtn.disabled = true;
-      status.textContent = TEXTS.status_sending[lang];
+  ringBtn.disabled = true;
+  status.textContent = TEXTS.status_sending[lang];
 
-      if (!qr_token) {
-        ringBtn.disabled = false;
-        return status.textContent = TEXTS.status_noqr[lang];
-      }
+  if (!qr_token) {
+    ringBtn.disabled = false;
+    console.error("❌ QR token eksik!");
+    return status.textContent = TEXTS.status_noqr[lang];
+  }
 
-      const payload = { qr_token, visitor_name: name || null, visitor_message: message || null };
+  const payload = { qr_token, visitor_name: name || null, visitor_message: message || null };
 
+  try {
+    console.log("📤 Gönderilen payload:", payload);
+    const res = await fetch('https://npvwenwghmxmrzqbfgbq.supabase.co/functions/v1/ring', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    console.log("⬅️ HTTP Durumu:", res.status, res.statusText);
+    const result = await res.json();
+    console.log("⬅️ Dönen JSON:", result);
+
+    if (!res.ok || !result.success) {
+      ringBtn.disabled = false;
+      console.error("❌ Zil çalma başarısız, hata:", result.error || "Bilinmeyen hata");
+      return status.textContent = `❌ ${result.error || 'Zil çalma başarısız.'}`;
+    }
+
+    sessionId = result.session_id;
+    status.textContent = TEXTS.status_success[lang];
+    document.getElementById('communication-options').classList.remove('hidden');
+
+    if (isIOS) {
       try {
-        const res = await fetch('https://npvwenwghmxmrzqbfgbq.supabase.co/functions/v1/ring', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-
-        const result = await res.json();
-        if (!res.ok || !result.success) {
-          ringBtn.disabled = false;
-          return status.textContent = `❌ ${result.error || 'Zil çalma başarısız.'}`;
-        }
-
-        sessionId = result.session_id;
-        status.textContent = TEXTS.status_success[lang];
-        document.getElementById('communication-options').classList.remove('hidden');
-
-        if (isIOS) {
-          try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            stream.getTracks().forEach(track => track.stop());
-            console.log("📱 iOS ses erişimi verildi.");
-          } catch (e) {
-            alert("Lütfen iOS cihazınızda mikrofon erişimine izin verin.");
-          }
-        }
-
-        document.getElementById('chatBtn').onclick = () => {
-          window.location.href = `chat.html?session_id=${sessionId}&lang=${lang}`;
-        };
-
-        document.getElementById('voiceBtn').classList.remove('hidden');
-        document.getElementById('voiceBtn').onclick = () => {
-          window.location.href = `visitor-call.html?session_id=${sessionId}&type=voice&lang=${lang}`;
-        };
-
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach(track => track.stop());
+        console.log("📱 iOS ses erişimi verildi.");
       } catch (e) {
-        ringBtn.disabled = false;
-        status.textContent = TEXTS.net_error[lang] + (e.message || e);
+        alert("Lütfen iOS cihazınızda mikrofon erişimine izin verin.");
+        console.error("📱 iOS mikrofon izni reddedildi:", e);
       }
     }
+
+    document.getElementById('chatBtn').onclick = () => {
+      window.location.href = `chat.html?session_id=${sessionId}&lang=${lang}`;
+    };
+
+    document.getElementById('voiceBtn').classList.remove('hidden');
+    document.getElementById('voiceBtn').onclick = () => {
+      window.location.href = `visitor-call.html?session_id=${sessionId}&type=voice&lang=${lang}`;
+    };
+
+  } catch (e) {
+    ringBtn.disabled = false;
+    console.error("❌ Ağ hatası veya beklenmeyen hata:", e);
+    status.textContent = TEXTS.net_error[lang] + (e.message || e);
+  }
+}
   </script>
 </body>
 </html>
