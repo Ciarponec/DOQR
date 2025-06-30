@@ -57,7 +57,9 @@
     };
 
     const params = new URLSearchParams(window.location.search);
-    let lang = params.get('lang') || localStorage.getItem('doqrLang') || (navigator.language.startsWith('tr') ? 'tr' : (navigator.language.startsWith('ru') ? 'ru' : 'en'));
+    let lang = params.get('lang') || localStorage.getItem('doqrLang') || 
+               (navigator.language.startsWith('tr') ? 'tr' :
+               (navigator.language.startsWith('ru') ? 'ru' : 'en'));
     document.getElementById('langSelect').value = lang;
 
     function setTexts() {
@@ -75,8 +77,8 @@
     };
 
     document.getElementById('closeBtn').onclick = () => {
+      history.go(-1);  // önce bir önceki sayfaya dönmeyi dene
       const closed = window.close();
-      // iOS/Safari engellerse fallback göster
       setTimeout(() => {
         document.getElementById('fallbackMsg').style.display = 'block';
       }, 300);
