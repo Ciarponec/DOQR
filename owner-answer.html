@@ -3,76 +3,50 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DOQR - Çağrıyı Yanıtla</title>
+  <title>DOQR - Çağrıyı Yanıtla (Sesli Görüşme)</title>
   <style>
     body { font-family: sans-serif; text-align: center; background: #f0f0f0; padding: 2em; }
     button { padding: 1em 2em; font-size: 16px; border-radius: 8px; border: none; background: #1976d2; color: white; }
-    #langSelect { position: absolute; right: 20px; top: 16px; font-size: 16px; }
   </style>
 </head>
 <body>
-  <select id="langSelect">
-    <option value="tr">🇹🇷 Türkçe</option>
-    <option value="en">🇬🇧 English</option>
-    <option value="ru">🇷🇺 Русский</option>
-  </select>
   <h2 id="callTitle">🔊 Sesli Çağrı Yanıtlanıyor...</h2>
-  <button id="endBtn" onclick="endCall()">Görüşmeyi Bitir</button>
+  <button onclick="endCall()">Görüşmeyi Bitir</button>
 
   <script type="module">
     import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-    const TEXTS = {
-      voice_answering: { tr: "🔊 Sesli Çağrı Yanıtlanıyor...", en: "🔊 Answering Voice Call...", ru: "🔊 Приём аудиозвонка..." },
-      sdp_waiting: { tr: "⏳ Teklif bekleniyor...", en: "⏳ Waiting for offer...", ru: "⏳ Ожидание предложения..." },
-      sdp_failed: { tr: "⚠️ SDP Teklifi alınamadı", en: "⚠️ Failed to get SDP offer", ru: "⚠️ Не удалось получить SDP-предложение" },
-      conn_error: { tr: "🚨 Bağlantı hatası oluştu", en: "🚨 Connection error occurred", ru: "🚨 Произошла ошибка соединения" },
-      end_btn: { tr: "Görüşmeyi Bitir", en: "End Call", ru: "Завершить звонок" },
-      ended: { tr: "Görüşme sonlandırıldı.", en: "Call ended.", ru: "Звонок завершен." },
-      connected: { tr: "✅ Bağlantı kuruldu", en: "✅ Connected", ru: "✅ Соединение установлено" }
-    };
+    const params = new URLSearchParams(window.location.search);
+    const call_id = params.get('call_id');
+    const role = 'owner';
 
     const supabase = createClient(
       'https://npvwenwghmxmrzqbfgbq.supabase.co',
       'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5wdndlbndnaG14bXJ6cWJmZ2JxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgyMDE1NDMsImV4cCI6MjA2Mzc3NzU0M30.feUs88g74qKEZU57LUF8lIobs_DuEjCZs-PQnHxmhtk'
     );
 
-    const params = new URLSearchParams(window.location.search);
-    let lang = params.get('lang') || localStorage.getItem('doqrLang') || 'tr';
-    const call_id = params.get('call_id');
-    const role = 'owner';
-
-    document.getElementById('langSelect').value = lang;
-    document.getElementById('langSelect').onchange = (e) => {
-      lang = e.target.value;
-      localStorage.setItem('doqrLang', lang);
-      setTexts();
-    };
-
-    function setTexts(context = null) {
-      const callTitle = document.getElementById('callTitle');
-      callTitle.innerText = TEXTS.voice_answering[lang];
-      document.getElementById('endBtn').textContent = TEXTS.end_btn[lang];
-      if (context && TEXTS[context]) callTitle.innerText = TEXTS[context][lang];
-    }
-
-    setTexts();
+    const callTitle = document.getElementById('callTitle');
+    let pc, localStream;
 
     if (!call_id) {
-      console.error("❌ call_id parametresi URL'de bulunamadı!");
-      setTexts('sdp_failed');
+      callTitle.innerText = '❌ call_id eksik!';
+      throw new Error("call_id parametresi eksik.");
     }
-
-    let pc, localStream;
 
     async function pollIceCandidates(fromWho) {
       let seen = new Set();
       setInterval(async () => {
-        const { data: candidates } = await supabase
+        const { data: candidates, error } = await supabase
           .from('calls_ice')
           .select('*')
           .eq('call_ref', call_id)
           .eq('sender', fromWho);
+
+        if (error) {
+          console.error('❌ ICE polling hatası:', error);
+          return;
+        }
+
         for (const c of candidates || []) {
           const key = c.candidate + c.sdp_mid + c.sdp_mline_index;
           if (seen.has(key)) continue;
@@ -83,6 +57,7 @@
               sdpMid: c.sdp_mid,
               sdpMLineIndex: c.sdp_mline_index
             });
+            console.log('✅ ICE adayı eklendi:', c.candidate);
           } catch (e) {
             console.error('🚫 ICE adayı eklenemedi:', e);
           }
@@ -91,50 +66,55 @@
     }
 
     async function init() {
-      if (!call_id) return;
-
       try {
-        try {
-          localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
-          console.log("🎤 Mikrofon erişimi verildi (owner)");
-        } catch (err) {
-          console.error("🎙 Mikrofon erişim hatası (owner):", err);
-          setTexts('conn_error');
-          return;
-        }
+        console.log('🎙 Mikrofon erişimi isteniyor...');
+        localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+        console.log('🎙 Mikrofon erişimi sağlandı.');
 
         const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
         pc = new RTCPeerConnection(config);
 
         pc.onicecandidate = async (event) => {
           if (event.candidate) {
-            await supabase.from('calls_ice').insert({
-              call_ref: call_id,
-              candidate: event.candidate.candidate,
-              sdp_mid: event.candidate.sdpMid,
-              sdp_mline_index: event.candidate.sdpMLineIndex,
-              sender: role
-            });
+            try {
+              await supabase.from('calls_ice').insert({
+                call_ref: call_id,
+                candidate: event.candidate.candidate,
+                sdp_mid: event.candidate.sdpMid,
+                sdp_mline_index: event.candidate.sdpMLineIndex,
+                sender: role
+              });
+              console.log('📨 ICE adayı gönderildi');
+            } catch (e) {
+              console.error('❌ ICE adayı gönderilemedi:', e);
+            }
           }
         };
 
         localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
 
         let attempt = 0;
-        const maxAttempts = 15;
-        const interval = setInterval(async () => {
+        const maxAttempts = 20;
+
+        const waitForOffer = setInterval(async () => {
           attempt++;
-          const { data } = await supabase
+          const { data, error } = await supabase
             .from('calls')
             .select('sdp_offer')
             .eq('call_id', call_id)
             .single();
 
-          console.log("📡 Supabase sdp_offer sorgusu sonucu:", data);
+          if (error) {
+            clearInterval(waitForOffer);
+            callTitle.innerText = '⚠️ SDP Teklifi okunamadı';
+            console.error("❌ SDP teklifi hatası:", error);
+            return;
+          }
 
           if (data?.sdp_offer) {
-            clearInterval(interval);
-            console.log("✅ SDP offer bulundu, işleniyor");
+            clearInterval(waitForOffer);
+            console.log("📡 SDP Teklifi alındı");
+
             await pc.setRemoteDescription({ type: 'offer', sdp: data.sdp_offer });
 
             const answer = await pc.createAnswer();
@@ -144,34 +124,33 @@
               .update({ sdp_answer: answer.sdp })
               .eq('call_id', call_id);
 
-            setTexts('connected');
+            console.log("✅ SDP answer kaydedildi");
+            callTitle.innerText = '✅ Bağlantı kuruluyor...';
+
             pollIceCandidates('visitor');
-          } else if (attempt >= maxAttempts) {
-            clearInterval(interval);
-            console.error("❌ SDP offer alınamadı, zaman aşımı.");
-            setTexts('sdp_failed');
+          } else {
+            console.log(`⏳ SDP bekleniyor... (${attempt})`);
+            if (attempt >= maxAttempts) {
+              clearInterval(waitForOffer);
+              callTitle.innerText = '⚠️ SDP Teklifi alınamadı';
+            }
           }
-        }, 500);
+        }, 2000);
+
       } catch (e) {
-        console.error('🚨 init error:', e);
-        setTexts('conn_error');
+        console.error('🚨 Genel hata:', e);
+        callTitle.innerText = '🚨 Bağlantı hatası oluştu';
       }
     }
 
-    async function endCall() {
+    function endCall() {
       try {
         pc?.getSenders().forEach(s => s.track?.stop());
         pc?.close();
         localStream?.getTracks().forEach(track => track.stop());
-
-        await supabase.from('calls').update({ status: 'ended' }).eq('call_id', call_id);
+        window.close();
       } catch (e) {
-        console.error("❌ endCall:", e);
-      } finally {
-        setTexts('ended');
-        setTimeout(() => {
-          window.location.replace('https://ciarponec.github.io/DOQR/ended.html?lang=' + lang);
-        }, 1000);
+        console.error("❌ endCall hatası:", e);
       }
     }
 
