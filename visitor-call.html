@@ -17,6 +17,7 @@
     <option value="ru">🇷🇺 Русский</option>
   </select>
   <h2 id="callTitle">🔊 Sesli Görüşmeye Hazır</h2>
+
   <button id="startBtn" onclick="startCall()">Görüşmeyi Başlat</button>
   <br /><br />
   <button id="endBtn" onclick="endCall()" style="display:none">Görüşmeyi Bitir</button>
@@ -29,52 +30,136 @@
       'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5wdndlbndnaG14bXJ6cWJmZ2JxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgyMDE1NDMsImV4cCI6MjA2Mzc3NzU0M30.feUs88g74qKEZU57LUF8lIobs_DuEjCZs-PQnHxmhtk'
     );
 
-    const params = new URLSearchParams(window.location.search);
-    const session_id = params.get('session_id');
+    const TEXTS = {
+      voice_starting: { tr: "🔊 Sesli Görüşme Başlatılıyor...", en: "🔊 Starting Voice Call...", ru: "🔊 Запуск аудиозвонка..." },
+      sdp_waiting: { tr: "⏳ Yanıt bekleniyor...", en: "⏳ Waiting for answer...", ru: "⏳ Ожидание ответа..." },
+      sdp_failed: { tr: "⚠️ Yanıt alınamadı", en: "⚠️ No answer received", ru: "⚠️ Ответ не получен" },
+      end_btn: { tr: "Görüşmeyi Bitir", en: "End Call", ru: "Завершить звонок" },
+      ended: { tr: "Görüşme sonlandırıldı.", en: "Call ended.", ru: "Звонок завершен." },
+      conn_error: { tr: "🚨 Bağlantı hatası oluştu", en: "🚨 Connection error", ru: "🚨 Ошибка соединения" }
+    };
+
+    let lang = localStorage.getItem('doqrLang') || 'tr';
+
     const callTitle = document.getElementById('callTitle');
-    const startBtn = document.getElementById('startBtn');
-    const endBtn = document.getElementById('endBtn');
-
-    let pc, localStream;
-    let call_id = null;
-    const role = 'visitor';
-
-    // Dil yönetimi (tercihe göre)
-    let lang = params.get('lang') || localStorage.getItem('doqrLang') || 'tr';
     document.getElementById('langSelect').value = lang;
     document.getElementById('langSelect').onchange = (e) => {
       lang = e.target.value;
       localStorage.setItem('doqrLang', lang);
+      setTexts();
     };
 
+    function setTexts(context = null) {
+      callTitle.innerText = TEXTS.voice_starting[lang];
+      document.getElementById('endBtn').textContent = TEXTS.end_btn[lang];
+      if (context && TEXTS[context]) callTitle.innerText = TEXTS[context][lang];
+    }
+
+    setTexts();
+
+    const params = new URLSearchParams(window.location.search);
+    const session_id = params.get('session_id');
+    let call_id = params.get('call_id'); // Burada call_id varsa alıyoruz, yoksa başlatacağız
+    const role = 'visitor';
+
     async function sendCallRequest() {
-      if (!session_id) {
-        throw new Error('session_id eksik');
-      }
-      const res = await fetch('https://npvwenwghmxmrzqbfgbq.supabase.co/functions/v1/send-call-request', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id, call_type: 'voice' })
+      const res = await fetch("https://npvwenwghmxmrzqbfgbq.supabase.co/functions/v1/send-call-request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id, call_type: "voice" })
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Sunucu hatası');
+      if (!res.ok) throw new Error(json.error || "Sunucu hatası");
       return json.call_id;
     }
 
-    async function pollIceCandidates(fromWho) {
+    async function startCall() {
+      if (!session_id) {
+        alert("session_id eksik!");
+        return;
+      }
+
+      document.getElementById('startBtn').style.display = 'none';
+      document.getElementById('endBtn').style.display = 'inline-block';
+      setTexts();
+
+      try {
+        if (!call_id) {
+          call_id = await sendCallRequest();
+          // call_id'yi URL'ye ekleyerek sayfayı yenile (optional ama tavsiye edilir)
+          const newUrl = new URL(window.location.href);
+          newUrl.searchParams.set('call_id', call_id);
+          window.history.replaceState(null, '', newUrl);
+        }
+
+        const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+        const pc = new RTCPeerConnection(config);
+
+        let stream;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+        } catch (err) {
+          console.error("🎙 Mikrofon erişim hatası:", err);
+          setTexts('conn_error');
+          return;
+        }
+
+        stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+
+        pc.onicecandidate = async (event) => {
+          if (event.candidate) {
+            await supabase.from('calls_ice').insert({
+              call_ref: call_id,
+              candidate: event.candidate.candidate,
+              sdp_mid: event.candidate.sdpMid,
+              sdp_mline_index: event.candidate.sdpMLineIndex,
+              sender: role
+            });
+          }
+        };
+
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+
+        await supabase.from('calls').update({ sdp_offer: offer.sdp }).eq('call_id', call_id);
+
+        let attempt = 0;
+        const maxAttempts = 15;
+        const interval = setInterval(async () => {
+          const { data } = await supabase
+            .from('calls')
+            .select('sdp_answer')
+            .eq('call_id', call_id)
+            .single();
+
+          if (data?.sdp_answer) {
+            clearInterval(interval);
+            await pc.setRemoteDescription({ type: 'answer', sdp: data.sdp_answer });
+            pollIceCandidates('owner', pc);
+          } else {
+            attempt++;
+            if (attempt >= maxAttempts) {
+              clearInterval(interval);
+              setTexts('sdp_failed');
+            }
+          }
+        }, 500);
+
+        window.pc = pc;
+      } catch (e) {
+        console.error('❌ startCall error:', e);
+        setTexts('conn_error');
+      }
+    }
+
+    async function pollIceCandidates(fromWho, pc) {
       let seen = new Set();
       setInterval(async () => {
-        const { data: candidates, error } = await supabase
+        const { data: candidates } = await supabase
           .from('calls_ice')
           .select('*')
           .eq('call_ref', call_id)
           .eq('sender', fromWho);
-
-        if (error) {
-          console.error('❌ ICE polling hatası:', error);
-          return;
-        }
-
         for (const c of candidates || []) {
           const key = c.candidate + c.sdp_mid + c.sdp_mline_index;
           if (seen.has(key)) continue;
@@ -85,108 +170,29 @@
               sdpMid: c.sdp_mid,
               sdpMLineIndex: c.sdp_mline_index
             });
-            console.log('✅ ICE adayı eklendi:', c.candidate);
           } catch (e) {
-            console.error('🚫 ICE adayı eklenemedi:', e);
+            console.error('❌ ICE eklenemedi:', e);
           }
         }
-      }, 1500);
+      }, 1000);
     }
 
-    async function startCall() {
-      startBtn.style.display = 'none';
-      endBtn.style.display = 'inline-block';
-      callTitle.innerText = '🔊 Sesli Görüşme Başlatılıyor...';
-
+    async function endCall() {
       try {
-        call_id = await sendCallRequest();
-        console.log('📞 Çağrı başlatıldı, call_id:', call_id);
+        window.pc?.getSenders().forEach(s => s.track?.stop());
+        window.pc?.close();
 
-        localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
-        console.log('🎙 Mikrofon erişimi verildi');
-
-        const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
-        pc = new RTCPeerConnection(config);
-
-        pc.onicecandidate = async (event) => {
-          if (event.candidate) {
-            try {
-              await supabase.from('calls_ice').insert({
-                call_ref: call_id,
-                candidate: event.candidate.candidate,
-                sdp_mid: event.candidate.sdpMid,
-                sdp_mline_index: event.candidate.sdpMLineIndex,
-                sender: role
-              });
-              console.log('📨 ICE adayı gönderildi');
-            } catch (e) {
-              console.error('❌ ICE adayı gönderilemedi:', e);
-            }
-          }
-        };
-
-        localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-
-        await supabase.from('calls').update({ sdp_offer: offer.sdp }).eq('call_id', call_id);
-        console.log('📡 SDP Teklifi gönderildi');
-
-        let attempt = 0;
-        const maxAttempts = 20;
-        const waitForAnswer = setInterval(async () => {
-          attempt++;
-          const { data, error } = await supabase
-            .from('calls')
-            .select('sdp_answer')
-            .eq('call_id', call_id)
-            .single();
-
-          if (error) {
-            clearInterval(waitForAnswer);
-            callTitle.innerText = '⚠️ SDP yanıtı okunamadı';
-            console.error('❌ SDP yanıtı hatası:', error);
-            return;
-          }
-
-          if (data?.sdp_answer) {
-            clearInterval(waitForAnswer);
-            console.log('✅ SDP Yanıtı alındı');
-            await pc.setRemoteDescription({ type: 'answer', sdp: data.sdp_answer });
-            callTitle.innerText = '✅ Bağlantı kuruldu';
-            pollIceCandidates('owner');
-          } else if (attempt >= maxAttempts) {
-            clearInterval(waitForAnswer);
-            callTitle.innerText = '⚠️ SDP Yanıtı alınamadı';
-            console.warn('⚠️ SDP yanıtı zaman aşımı');
-          } else {
-            console.log(`⏳ SDP yanıtı bekleniyor... (${attempt})`);
-          }
-        }, 2000);
-
+        await supabase.from('calls').update({ status: 'ended' }).eq('call_id', call_id);
       } catch (e) {
-        console.error('❌ startCall hatası:', e);
-        callTitle.innerText = '🚨 Bağlantı hatası oluştu';
-        startBtn.style.display = 'inline-block';
-        endBtn.style.display = 'none';
+        console.error("❌ endCall:", e);
+      } finally {
+        setTexts('ended');
+        setTimeout(() => {
+          window.location.replace('https://ciarponec.github.io/DOQR/ended.html?lang=' + lang);
+        }, 1000);
       }
     }
 
-    function endCall() {
-      try {
-        pc?.getSenders().forEach(s => s.track?.stop());
-        pc?.close();
-        localStream?.getTracks().forEach(track => track.stop());
-        callTitle.innerText = 'Görüşme sonlandırıldı.';
-        startBtn.style.display = 'inline-block';
-        endBtn.style.display = 'none';
-      } catch (e) {
-        console.error('❌ endCall hatası:', e);
-      }
-    }
-
-    window.startCall = startCall;
     window.endCall = endCall;
   </script>
 </body>
