@@ -58,6 +58,11 @@
 
     setTexts();
 
+    if (!call_id) {
+      console.error("❌ call_id parametresi URL'de bulunamadı!");
+      setTexts('sdp_failed');
+    }
+
     let pc, localStream;
 
     async function pollIceCandidates(fromWho) {
@@ -86,9 +91,12 @@
     }
 
     async function init() {
+      if (!call_id) return;
+
       try {
         try {
           localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+          console.log("🎤 Mikrofon erişimi verildi (owner)");
         } catch (err) {
           console.error("🎙 Mikrofon erişim hatası (owner):", err);
           setTexts('conn_error');
@@ -121,8 +129,12 @@
             .select('sdp_offer')
             .eq('call_id', call_id)
             .single();
+
+          console.log("📡 Supabase sdp_offer sorgusu sonucu:", data);
+
           if (data?.sdp_offer) {
             clearInterval(interval);
+            console.log("✅ SDP offer bulundu, işleniyor");
             await pc.setRemoteDescription({ type: 'offer', sdp: data.sdp_offer });
 
             const answer = await pc.createAnswer();
@@ -136,6 +148,7 @@
             pollIceCandidates('visitor');
           } else if (attempt >= maxAttempts) {
             clearInterval(interval);
+            console.error("❌ SDP offer alınamadı, zaman aşımı.");
             setTexts('sdp_failed');
           }
         }, 500);
