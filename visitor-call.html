@@ -18,9 +18,9 @@
   </select>
   <h2 id="callTitle">🔊 Sesli Görüşmeye Hazır</h2>
 
-  <button id="startBtn" onclick="startCall()">Görüşmeyi Başlat</button>
+  <button id="startBtn">Görüşmeyi Başlat</button>
   <br /><br />
-  <button id="endBtn" onclick="endCall()" style="display:none">Görüşmeyi Bitir</button>
+  <button id="endBtn" style="display:none">Görüşmeyi Bitir</button>
 
   <script type="module">
     import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -40,39 +40,33 @@
     };
 
     let lang = new URLSearchParams(window.location.search).get('lang') || localStorage.getItem('doqrLang') || 'tr';
-    const session_id = new URLSearchParams(window.location.search).get('session_id');
-    let call_id = null;
-    const role = 'visitor';
-    const owner_id = new URLSearchParams(window.location.search).get('owner_id'); // Owner ID sayfaya parametre olarak gelmeli
 
     const callTitle = document.getElementById('callTitle');
+    const startBtn = document.getElementById('startBtn');
+    const endBtn = document.getElementById('endBtn');
     document.getElementById('langSelect').value = lang;
+
+    function setTexts(context = null) {
+      callTitle.innerText = TEXTS.voice_starting[lang];
+      endBtn.textContent = TEXTS.end_btn[lang];
+      if (context && TEXTS[context]) callTitle.innerText = TEXTS[context][lang];
+    }
+
     document.getElementById('langSelect').onchange = (e) => {
       lang = e.target.value;
       localStorage.setItem('doqrLang', lang);
       setTexts();
     };
 
-    function setTexts(context = null) {
-      callTitle.innerText = TEXTS.voice_starting[lang];
-      document.getElementById('endBtn').textContent = TEXTS.end_btn[lang];
-      if (context && TEXTS[context]) callTitle.innerText = TEXTS[context][lang];
-    }
+    let call_id = null;
+    const session_id = new URLSearchParams(window.location.search).get('session_id');
+    const role = 'visitor';
 
     async function sendCallRequest() {
-      if (!session_id || !owner_id) {
-        throw new Error("Eksik parametre: session_id veya owner_id");
-      }
-
       const res = await fetch("https://npvwenwghmxmrzqbfgbq.supabase.co/functions/v1/send-call-request", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          session_id, 
-          caller_id: "visitor",   // Sabit visitor string
-          callee_id: owner_id,    // Kapı sahibi kullanıcı id'si
-          call_type: "voice"
-        })
+        body: JSON.stringify({ session_id, caller_id: 'visitor', callee_id: 'owner_id_here', call_type: "voice" })
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Sunucu hatası");
@@ -105,8 +99,8 @@
     }
 
     async function startCall() {
-      document.getElementById('startBtn').style.display = 'none';
-      document.getElementById('endBtn').style.display = 'inline-block';
+      startBtn.style.display = 'none';
+      endBtn.style.display = 'inline-block';
       setTexts();
 
       try {
@@ -187,7 +181,10 @@
       }
     }
 
-    window.endCall = endCall;
+    startBtn.addEventListener('click', startCall);
+    endBtn.addEventListener('click', endCall);
+
+    setTexts();
   </script>
 </body>
 </html>
