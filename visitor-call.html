@@ -39,7 +39,9 @@
       conn_error: { tr: "🚨 Bağlantı hatası oluştu", en: "🚨 Connection error", ru: "🚨 Ошибка соединения" }
     };
 
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
     const params = new URLSearchParams(window.location.search);
+    const session_id = params.get('session_id');
     let lang = params.get('lang') || localStorage.getItem('doqrLang') || 'tr';
     let call_id = null;
     const role = 'visitor';
@@ -59,27 +61,15 @@
     }
 
     async function sendCallRequest() {
-      console.log("🚀 sendCallRequest başlıyor...");
-      const session_id = params.get('session_id');
-      if (!session_id) {
-        throw new Error("session_id parametresi URL'de bulunamadı!");
-      }
-      console.log("📋 session_id:", session_id);
-
-      const payload = { session_id, call_type: "voice" };
-
+      console.log('📨 sendCallRequest başlıyor...');
       const res = await fetch("https://npvwenwghmxmrzqbfgbq.supabase.co/functions/v1/send-call-request", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({ session_id, call_type: "voice" })
       });
-
       const json = await res.json();
-      console.log("📨 send-call-request response:", json);
-
+      console.log('📨 sendCallRequest sonucu:', json);
       if (!res.ok) throw new Error(json.error || "Sunucu hatası");
-      if (!json.call_id) throw new Error("call_id eksik");
-
       return json.call_id;
     }
 
@@ -109,13 +99,13 @@
     }
 
     async function startCall() {
+      console.log('▶️ startCall tetiklendi');
       document.getElementById('startBtn').style.display = 'none';
       document.getElementById('endBtn').style.display = 'inline-block';
       setTexts();
 
       try {
         call_id = await sendCallRequest();
-        console.log("✅ call_id (visitor):", call_id);
 
         const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
         const pc = new RTCPeerConnection(config);
@@ -123,7 +113,6 @@
         let stream;
         try {
           stream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
-          console.log("🎤 Mikrofon erişimi verildi");
         } catch (err) {
           console.error("🎙 Mikrofon erişim hatası:", err);
           setTexts('conn_error');
@@ -146,10 +135,7 @@
 
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
-        console.log("📡 SDP offer oluşturuldu ve set edildi");
-
         await supabase.from('calls').update({ sdp_offer: offer.sdp }).eq('call_id', call_id);
-        console.log("📤 SDP offer Supabase'e güncellendi");
 
         let attempt = 0;
         const maxAttempts = 15;
@@ -162,14 +148,12 @@
 
           if (data?.sdp_answer) {
             clearInterval(interval);
-            console.log("✅ SDP answer geldi:", data.sdp_answer);
             await pc.setRemoteDescription({ type: 'answer', sdp: data.sdp_answer });
             pollIceCandidates('owner', pc);
           } else {
             attempt++;
             if (attempt >= maxAttempts) {
               clearInterval(interval);
-              console.error("❌ SDP answer alınamadı, zaman aşımı.");
               setTexts('sdp_failed');
             }
           }
@@ -198,6 +182,7 @@
       }
     }
 
+    window.startCall = startCall;
     window.endCall = endCall;
   </script>
 </body>
