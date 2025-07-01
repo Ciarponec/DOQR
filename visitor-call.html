@@ -61,39 +61,41 @@
     }
 
     async function sendCallRequest() {
-      const res = await fetch("https://npvwenwghmxmrzqbfgbq.supabase.co/functions/v1/send-call-request", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ session_id, call_type: "voice" })
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Sunucu hatası");
-      return json.call_id;
-    }
+      console.log("[VisitorCall] sendCallRequest started");
+      console.log("[VisitorCall] session_id:", session_id);
+      // TODO: caller_id ve callee_id'yi gerçek değerlerle değiştir
+      const caller_id = "visitor_user_id";  // Buraya gerçek visitor id gelecek
+      const callee_id = "owner_user_id";    // Buraya gerçek owner id gelecek
 
-    async function pollIceCandidates(fromWho, pc) {
-      let seen = new Set();
-      setInterval(async () => {
-        const { data: candidates } = await supabase
-          .from('calls_ice')
-          .select('*')
-          .eq('call_ref', call_id)
-          .eq('sender', fromWho);
-        for (const c of candidates || []) {
-          const key = c.candidate + c.sdp_mid + c.sdp_mline_index;
-          if (seen.has(key)) continue;
-          seen.add(key);
-          try {
-            await pc.addIceCandidate({
-              candidate: c.candidate,
-              sdpMid: c.sdp_mid,
-              sdpMLineIndex: c.sdp_mline_index
-            });
-          } catch (e) {
-            console.error('❌ ICE eklenemedi:', e);
-          }
-        }
-      }, 1000);
+      const payload = {
+        session_id,
+        call_type: "voice",
+        caller_id,
+        callee_id
+      };
+
+      console.log("[VisitorCall] Payload to send:", payload);
+
+      try {
+        const res = await fetch("https://npvwenwghmxmrzqbfgbq.supabase.co/functions/v1/send-call-request", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        const json = await res.json();
+        console.log("[VisitorCall] Response status:", res.status);
+        console.log("[VisitorCall] Response JSON:", json);
+
+        if (!res.ok) throw new Error(json.error || "Sunucu hatası");
+
+        console.log("[VisitorCall] call_id received:", json.call_id);
+        return json.call_id;
+
+      } catch (error) {
+        console.error("[VisitorCall] sendCallRequest error:", error);
+        throw error;
+      }
     }
 
     async function startCall() {
@@ -103,6 +105,7 @@
 
       try {
         call_id = await sendCallRequest();
+        console.log("[VisitorCall] startCall call_id:", call_id);
 
         const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
         const pc = new RTCPeerConnection(config);
@@ -158,9 +161,34 @@
 
         window.pc = pc;
       } catch (e) {
-        console.error('❌ startCall error:', e);
+        console.error('[VisitorCall] startCall error:', e);
         setTexts('conn_error');
       }
+    }
+
+    async function pollIceCandidates(fromWho, pc) {
+      let seen = new Set();
+      setInterval(async () => {
+        const { data: candidates } = await supabase
+          .from('calls_ice')
+          .select('*')
+          .eq('call_ref', call_id)
+          .eq('sender', fromWho);
+        for (const c of candidates || []) {
+          const key = c.candidate + c.sdp_mid + c.sdp_mline_index;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          try {
+            await pc.addIceCandidate({
+              candidate: c.candidate,
+              sdpMid: c.sdp_mid,
+              sdpMLineIndex: c.sdp_mline_index
+            });
+          } catch (e) {
+            console.error('❌ ICE eklenemedi:', e);
+          }
+        }
+      }, 1000);
     }
 
     async function endCall() {
@@ -170,7 +198,7 @@
 
         await supabase.from('calls').update({ status: 'ended' }).eq('call_id', call_id);
       } catch (e) {
-        console.error("❌ endCall:", e);
+        console.error("[VisitorCall] endCall:", e);
       } finally {
         setTexts('ended');
         setTimeout(() => {
