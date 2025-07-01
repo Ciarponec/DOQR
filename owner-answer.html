@@ -3,35 +3,60 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DOQR - Çağrıyı Yanıtla (Sesli Görüşme)</title>
+  <title>DOQR - Çağrıyı Yanıtla</title>
   <style>
     body { font-family: sans-serif; text-align: center; background: #f0f0f0; padding: 2em; }
     button { padding: 1em 2em; font-size: 16px; border-radius: 8px; border: none; background: #1976d2; color: white; }
   </style>
 </head>
 <body>
+  <select id="langSelect">
+    <option value="tr">🇹🇷 Türkçe</option>
+    <option value="en">🇬🇧 English</option>
+    <option value="ru">🇷🇺 Русский</option>
+  </select>
   <h2 id="callTitle">🔊 Sesli Çağrı Yanıtlanıyor...</h2>
-  <button onclick="endCall()">Görüşmeyi Bitir</button>
+  <button id="endBtn" onclick="endCall()">Görüşmeyi Bitir</button>
 
   <script type="module">
     import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-
-    const params = new URLSearchParams(window.location.search);
-    const call_id = params.get('call_id');
-    const role = 'owner';
 
     const supabase = createClient(
       'https://npvwenwghmxmrzqbfgbq.supabase.co',
       'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5wdndlbndnaG14bXJ6cWJmZ2JxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgyMDE1NDMsImV4cCI6MjA2Mzc3NzU0M30.feUs88g74qKEZU57LUF8lIobs_DuEjCZs-PQnHxmhtk'
     );
 
-    const callTitle = document.getElementById('callTitle');
-    let pc, localStream;
+    const params = new URLSearchParams(window.location.search);
+    let lang = params.get('lang') || localStorage.getItem('doqrLang') || 'tr';
+    const call_id = params.get('call_id');
+    const role = 'owner';
 
-    if (!call_id) {
-      callTitle.innerText = '❌ call_id eksik!';
-      throw new Error("call_id parametresi eksik.");
+    document.getElementById('langSelect').value = lang;
+    document.getElementById('langSelect').onchange = (e) => {
+      lang = e.target.value;
+      localStorage.setItem('doqrLang', lang);
+      setTexts();
+    };
+
+    function setTexts(context = null) {
+      const callTitle = document.getElementById('callTitle');
+      callTitle.innerText = "🔊 Sesli Çağrı Yanıtlanıyor...";
+      document.getElementById('endBtn').textContent = "Görüşmeyi Bitir";
+      if (context && contextTexts[context]) callTitle.innerText = contextTexts[context][lang];
     }
+
+    const contextTexts = {
+      voice_answering: { tr: "🔊 Sesli Çağrı Yanıtlanıyor...", en: "🔊 Answering Voice Call...", ru: "🔊 Приём аудиозвонка..." },
+      sdp_waiting: { tr: "⏳ Teklif bekleniyor...", en: "⏳ Waiting for offer...", ru: "⏳ Ожидание предложения..." },
+      sdp_failed: { tr: "⚠️ SDP Teklifi alınamadı", en: "⚠️ Failed to get SDP offer", ru: "⚠️ Не удалось получить SDP-предложение" },
+      conn_error: { tr: "🚨 Bağlantı hatası oluştu", en: "🚨 Connection error occurred", ru: "🚨 Произошла ошибка соединения" },
+      ended: { tr: "Görüşme sonlandırıldı.", en: "Call ended.", ru: "Звонок завершен." },
+      connected: { tr: "✅ Bağlantı kuruldu", en: "✅ Connected", ru: "✅ Соединение установлено" }
+    };
+
+    setTexts();
+
+    let pc, localStream;
 
     async function pollIceCandidates(fromWho) {
       let seen = new Set();
@@ -67,54 +92,43 @@
 
     async function init() {
       try {
-        console.log('🎙 Mikrofon erişimi isteniyor...');
-        localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
-        console.log('🎙 Mikrofon erişimi sağlandı.');
+        try {
+          localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+        } catch (err) {
+          console.error("🎙 Mikrofon erişim hatası (owner):", err);
+          setTexts('conn_error');
+          return;
+        }
 
         const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
         pc = new RTCPeerConnection(config);
 
         pc.onicecandidate = async (event) => {
           if (event.candidate) {
-            try {
-              await supabase.from('calls_ice').insert({
-                call_ref: call_id,
-                candidate: event.candidate.candidate,
-                sdp_mid: event.candidate.sdpMid,
-                sdp_mline_index: event.candidate.sdpMLineIndex,
-                sender: role
-              });
-              console.log('📨 ICE adayı gönderildi');
-            } catch (e) {
-              console.error('❌ ICE adayı gönderilemedi:', e);
-            }
+            await supabase.from('calls_ice').insert({
+              call_ref: call_id,
+              candidate: event.candidate.candidate,
+              sdp_mid: event.candidate.sdpMid,
+              sdp_mline_index: event.candidate.sdpMLineIndex,
+              sender: role
+            });
           }
         };
 
         localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
 
         let attempt = 0;
-        const maxAttempts = 20;
-
-        const waitForOffer = setInterval(async () => {
+        const maxAttempts = 15;
+        const interval = setInterval(async () => {
           attempt++;
-          const { data, error } = await supabase
+          const { data } = await supabase
             .from('calls')
             .select('sdp_offer')
             .eq('call_id', call_id)
             .single();
 
-          if (error) {
-            clearInterval(waitForOffer);
-            callTitle.innerText = '⚠️ SDP Teklifi okunamadı';
-            console.error("❌ SDP teklifi hatası:", error);
-            return;
-          }
-
           if (data?.sdp_offer) {
-            clearInterval(waitForOffer);
-            console.log("📡 SDP Teklifi alındı");
-
+            clearInterval(interval);
             await pc.setRemoteDescription({ type: 'offer', sdp: data.sdp_offer });
 
             const answer = await pc.createAnswer();
@@ -124,33 +138,33 @@
               .update({ sdp_answer: answer.sdp })
               .eq('call_id', call_id);
 
-            console.log("✅ SDP answer kaydedildi");
-            callTitle.innerText = '✅ Bağlantı kuruluyor...';
-
+            setTexts('connected');
             pollIceCandidates('visitor');
-          } else {
-            console.log(`⏳ SDP bekleniyor... (${attempt})`);
-            if (attempt >= maxAttempts) {
-              clearInterval(waitForOffer);
-              callTitle.innerText = '⚠️ SDP Teklifi alınamadı';
-            }
+          } else if (attempt >= maxAttempts) {
+            clearInterval(interval);
+            setTexts('sdp_failed');
           }
-        }, 2000);
-
+        }, 500);
       } catch (e) {
-        console.error('🚨 Genel hata:', e);
-        callTitle.innerText = '🚨 Bağlantı hatası oluştu';
+        console.error('🚨 init error:', e);
+        setTexts('conn_error');
       }
     }
 
-    function endCall() {
+    async function endCall() {
       try {
         pc?.getSenders().forEach(s => s.track?.stop());
         pc?.close();
         localStream?.getTracks().forEach(track => track.stop());
-        window.close();
+
+        await supabase.from('calls').update({ status: 'ended' }).eq('call_id', call_id);
       } catch (e) {
-        console.error("❌ endCall hatası:", e);
+        console.error("❌ endCall:", e);
+      } finally {
+        setTexts('ended');
+        setTimeout(() => {
+          window.location.replace('https://ciarponec.github.io/DOQR/ended.html?lang=' + lang);
+        }, 1000);
       }
     }
 
