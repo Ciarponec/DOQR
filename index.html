@@ -36,7 +36,7 @@
     <div id="communication-options" class="hidden">
       <p id="commOptionsTitle">Görüşme seçenekleri:</p>
       <button id="chatBtn" class="call-btn">💬 Yazılı Chat</button>
-      <button id="callBtn" class="call-btn hidden">📞 Telefonla Ara</button>
+      <button id="callBtn" class="call-btn" disabled>📞 Telefonla Ara</button>
     </div>
   </div>
 
@@ -128,12 +128,15 @@
         });
 
         const ownerInfo = await ownerRes.json();
+        const callBtn = document.getElementById('callBtn');
+
         if (ownerInfo.allow_calls && ownerInfo.phone_number) {
-          const callBtn = document.getElementById('callBtn');
-          callBtn.classList.remove('hidden');
+          callBtn.disabled = false;
           callBtn.onclick = () => {
             window.location.href = `tel:${ownerInfo.phone_number}`;
           };
+        } else {
+          callBtn.disabled = true;
         }
 
       } catch (e) {
