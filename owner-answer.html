@@ -6,7 +6,7 @@
   <title>DOQR - Çağrıyı Yanıtla</title>
   <style>
     body { font-family: sans-serif; text-align: center; background: #f0f0f0; padding: 2em; }
-    button { padding: 1em 2em; font-size: 16px; border-radius: 8px; border: none; background: #1976d2; color: white; }
+    button { padding: 1em 2em; font-size: 16px; border-radius: 8px; border: none; background: #1976d2; color: white; cursor: pointer; }
   </style>
 </head>
 <body>
@@ -15,6 +15,7 @@
     <option value="en">🇬🇧 English</option>
     <option value="ru">🇷🇺 Русский</option>
   </select>
+
   <h2 id="callTitle">🔊 Sesli Çağrı Yanıtlanıyor...</h2>
   <button id="endBtn" onclick="endCall()">Görüşmeyi Bitir</button>
 
@@ -27,14 +28,15 @@
       'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5wdndlbndnaG14bXJ6cWJmZ2JxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgyMDE1NDMsImV4cCI6MjA2Mzc3NzU0M30.feUs88g74qKEZU57LUF8lIobs_DuEjCZs-PQnHxmhtk'
     );
 
+    // URL parametrelerini alıyoruz
     const params = new URLSearchParams(window.location.search);
     let lang = params.get('lang') || localStorage.getItem('doqrLang') || 'tr';
-
-    // callId'yi AppState'den veya localStorage'dan alıyoruz
-    const callId = localStorage.getItem('callId'); // Burada localStorage kullanılıyor, eğer FlutterFlow AppState'den farklı yöntem varsa ona göre düzenle
-
+    // FlutterFlow'dan AppState olarak gelen callId'yi localStorage'da sakladıysan, oradan alabilirsin
+    const callId = params.get('call_id') || localStorage.getItem('callId'); 
+    const sessionId = params.get('session_id') || localStorage.getItem('sessionId');
     const role = 'owner';
 
+    // Dil seçimi ve çeviriler
     document.getElementById('langSelect').value = lang;
     document.getElementById('langSelect').onchange = (e) => {
       lang = e.target.value;
@@ -53,17 +55,17 @@
 
     function setTexts(context = null) {
       const callTitle = document.getElementById('callTitle');
-      callTitle.innerText = context ? contextTexts[context][lang] || contextTexts.voice_answering[lang] : contextTexts.voice_answering[lang];
-      document.getElementById('endBtn').textContent = "Görüşmeyi Bitir";
+      callTitle.innerText = context ? (contextTexts[context][lang] || contextTexts.voice_answering[lang]) : contextTexts.voice_answering[lang];
+      document.getElementById('endBtn').textContent = (lang === 'en') ? "End Call" : (lang === 'ru') ? "Завершить звонок" : "Görüşmeyi Bitir";
     }
 
     setTexts();
 
     if (!callId) {
-      console.error("❌ callId localStorage'da yok, çağrı başlatılamıyor.");
+      console.error("❌ call_id parametresi URL'de veya localStorage'da yok, çağrı başlatılamıyor.");
       setTexts('conn_error');
-      alert("callId parametresi eksik, çağrı başlatılamıyor.");
-      throw new Error("callId parametresi eksik.");
+      alert("call_id parametresi eksik, çağrı başlatılamıyor.");
+      throw new Error("call_id parametresi eksik.");
     }
 
     let pc, localStream;
