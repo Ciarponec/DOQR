@@ -51,31 +51,20 @@
   <script type="module">
     import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-    const TEXTS = {
-      chat_title: { tr: "💬 DOQR Sohbet", en: "💬 DOQR Chat", ru: "💬 DOQR Чат" },
-      msg_placeholder: { tr: "Mesaj yazın...", en: "Type a message...", ru: "Напишите сообщение..." },
-      send: { tr: "Gönder", en: "Send", ru: "Отправить" },
-      error_no_session: { tr: "Session ID yok.", en: "No session ID.", ru: "Нет идентификатора сессии." },
-      error_send: { tr: "Mesaj gönderilemedi.", en: "Failed to send message.", ru: "Не удалось отправить сообщение." },
-      error_network: { tr: "Ağ hatası: ", en: "Network error: ", ru: "Сетевая ошибка: " },
-      incoming_call: {
-        tr: "📞 Yeni sesli çağrı geldi!",
-        en: "📞 New voice call received!",
-        ru: "📞 Новый аудиозвонок!"
-      }
-    };
-
     const params = new URLSearchParams(window.location.search);
-    const session_id = params.get('session_id');
+    const ring_id = params.get('ring_id');
     let sender = params.get('sender') || 'visitor';
 
     let lang = params.get('lang') || localStorage.getItem('doqrLang') || (navigator.language.startsWith('tr') ? 'tr' : (navigator.language.startsWith('ru') ? 'ru' : 'en'));
     document.getElementById('langSelect').value = lang;
-    document.getElementById('langSelect').onchange = (e) => {
-      lang = e.target.value;
-      localStorage.setItem('doqrLang', lang);
-      setTexts();
+
+    const TEXTS = {
+      chat_title: { tr: "💬 DOQR Sohbet", en: "💬 DOQR Chat", ru: "💬 DOQR Чат" },
+      msg_placeholder: { tr: "Mesaj yazın...", en: "Type a message...", ru: "Напишите сообщение..." },
+      send: { tr: "Gönder", en: "Send", ru: "Отправить" },
+      error_no_ring: { tr: "Ring ID yok.", en: "No ring ID.", ru: "Нет идентификатора звонка." },
+      error_send: { tr: "Mesaj gönderilemedi.", en: "Failed to send message.", ru: "Не удалось отправить сообщение." },
+      error_network: { tr: "Ağ hatası: ", en: "Network error: ", ru: "Сетевая ошибка: " }
     };
 
     const AVATAR_LETTERS = { owner: 'E', visitor: 'Z' };
@@ -89,6 +78,12 @@
     const messagesDiv = document.getElementById('messages');
     const input = document.getElementById('messageInput');
     const sendBtn = document.getElementById('sendBtn');
+
+    document.getElementById('langSelect').onchange = (e) => {
+      lang = e.target.value;
+      localStorage.setItem('doqrLang', lang);
+      setTexts();
+    };
 
     function setTexts() {
       chatTitleDiv.textContent = TEXTS.chat_title[lang];
@@ -123,31 +118,31 @@
       messagesDiv.scrollTop = messagesDiv.scrollHeight;
       setTimeout(() => {
         messagesDiv.scrollTop = messagesDiv.scrollHeight;
-      }, isIOS ? 250 : 0);
+      }, 0);
     }
 
     async function initialLoad() {
-      if (!session_id) {
-        messagesDiv.innerHTML = `<div style="color:#e74c3c;text-align:center;">${TEXTS.error_no_session[lang]}</div>`;
+      if (!ring_id) {
+        messagesDiv.innerHTML = `<div style="color:#e74c3c;text-align:center;">${TEXTS.error_no_ring[lang]}</div>`;
         return;
       }
       const { data } = await supabase
         .from('chat_messages')
         .select('*')
-        .eq('session_ref', session_id)
+        .eq('ring_id', ring_id)
         .order('created_at', { ascending: true });
       (data || []).forEach(appendMessage);
     }
 
     async function sendMessage() {
       const text = input.value.trim();
-      if (!text || !session_id) return;
+      if (!text || !ring_id) return;
       sendBtn.disabled = true;
       try {
         const resp = await fetch('https://npvwenwghmxmrzqbfgbq.functions.supabase.co/send-chat-message', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ session_id, sender, text })
+          body: JSON.stringify({ ring_id, sender, text })
         });
         const res = await resp.json();
         if (!resp.ok || !res.success) {
@@ -164,14 +159,6 @@
     sendBtn.onclick = sendMessage;
     input.addEventListener('keyup', (e) => { if (e.key === 'Enter') sendMessage(); });
 
-    if (isIOS) {
-      input.addEventListener('focus', () => {
-        setTimeout(() => {
-          input.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }, 300);
-      });
-    }
-
     initialLoad();
 
     supabase.channel('chat_channel')
@@ -179,22 +166,9 @@
         event: 'INSERT',
         schema: 'public',
         table: 'chat_messages',
-        filter: `session_ref=eq.${session_id}`
+        filter: `ring_id=eq.${ring_id}`
       }, payload => {
         appendMessage(payload.new);
-      }).subscribe();
-
-    supabase.channel('call_channel')
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'calls',
-        filter: `session_id=eq.${session_id}`
-      }, payload => {
-        const call = payload.new;
-        if (!call.ended && call.type === 'voice') {
-          alert(TEXTS.incoming_call[lang]);
-        }
       }).subscribe();
   </script>
 </body>
