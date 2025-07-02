@@ -102,24 +102,35 @@
     }
 
     function appendMessage(msg) {
-      const from = msg.sender === 'owner' ? 'from-owner' : 'from-visitor';
-      const row = document.createElement('div');
-      row.className = `message-row ${from}`;
-      const avatarDiv = document.createElement('div');
-      avatarDiv.className = 'avatar';
-      avatarDiv.textContent = AVATAR_LETTERS[msg.sender] || msg.sender[0].toUpperCase();
-      const bubble = document.createElement('div');
-      bubble.className = 'message-bubble';
-      bubble.innerHTML = `<span>${msg.content}</span><div class="msg-meta">${formatTime(msg.sent_at)}</div>`;
-      row.appendChild(avatarDiv);
-      row.appendChild(bubble);
-      messagesDiv.appendChild(row);
+  console.log('Gelen mesaj:', msg); // Bu satır da yardımcı olur
 
-      messagesDiv.scrollTop = messagesDiv.scrollHeight;
-      setTimeout(() => {
-        messagesDiv.scrollTop = messagesDiv.scrollHeight;
-      }, 0);
-    }
+  const from = msg.sender === 'owner' ? 'from-owner' : 'from-visitor';
+  const row = document.createElement('div');
+  row.className = `message-row ${from}`;
+
+  const avatarDiv = document.createElement('div');
+  avatarDiv.className = 'avatar';
+  avatarDiv.textContent = AVATAR_LETTERS[msg.sender] || msg.sender[0].toUpperCase();
+
+  const bubble = document.createElement('div');
+  bubble.className = 'message-bubble';
+
+  // 🔧 Hatalı satır:
+  // bubble.innerHTML = `<span>${msg.text}</span><div class="msg-meta">${formatTime(msg.sent_at)}</div>`;
+
+  // ✅ Doğru satır:
+  bubble.innerHTML = `<span>${msg.content}</span><div class="msg-meta">${formatTime(msg.sent_at)}</div>`;
+
+  row.appendChild(avatarDiv);
+  row.appendChild(bubble);
+  messagesDiv.appendChild(row);
+
+  messagesDiv.scrollTop = messagesDiv.scrollHeight;
+  setTimeout(() => {
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+  }, 0);
+}
+
 
     async function initialLoad() {
       if (!ring_id) {
