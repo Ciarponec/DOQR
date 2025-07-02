@@ -28,7 +28,7 @@
 
     const params = new URLSearchParams(window.location.search);
     let lang = params.get('lang') || localStorage.getItem('doqrLang') || 'tr';
-    const call_id = params.get('call_id');
+    const call_id = params.get('callID');
     const role = 'owner';
 
     document.getElementById('langSelect').value = lang;
