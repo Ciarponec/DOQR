@@ -21,6 +21,7 @@
   <script type="module">
     import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
+    // Supabase bağlantısı
     const supabase = createClient(
       'https://npvwenwghmxmrzqbfgbq.supabase.co',
       'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5wdndlbndnaG14bXJ6cWJmZ2JxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgyMDE1NDMsImV4cCI6MjA2Mzc3NzU0M30.feUs88g74qKEZU57LUF8lIobs_DuEjCZs-PQnHxmhtk'
@@ -28,7 +29,10 @@
 
     const params = new URLSearchParams(window.location.search);
     let lang = params.get('lang') || localStorage.getItem('doqrLang') || 'tr';
-    const call_id = params.get('callID');
+
+    // callId'yi AppState'den veya localStorage'dan alıyoruz
+    const callId = localStorage.getItem('callId'); // Burada localStorage kullanılıyor, eğer FlutterFlow AppState'den farklı yöntem varsa ona göre düzenle
+
     const role = 'owner';
 
     document.getElementById('langSelect').value = lang;
@@ -55,11 +59,11 @@
 
     setTexts();
 
-    if (!call_id) {
-      console.error("❌ URL parametresi 'call_id' eksik.");
+    if (!callId) {
+      console.error("❌ callId localStorage'da yok, çağrı başlatılamıyor.");
       setTexts('conn_error');
-      alert("call_id parametresi eksik, çağrı başlatılamıyor.");
-      throw new Error("call_id parametresi eksik.");
+      alert("callId parametresi eksik, çağrı başlatılamıyor.");
+      throw new Error("callId parametresi eksik.");
     }
 
     let pc, localStream;
@@ -70,7 +74,7 @@
         const { data: candidates, error } = await supabase
           .from('calls_ice')
           .select('*')
-          .eq('call_ref', call_id)
+          .eq('call_ref', callId)
           .eq('sender', fromWho);
 
         if (error) {
@@ -113,7 +117,7 @@
         pc.onicecandidate = async (event) => {
           if (event.candidate) {
             await supabase.from('calls_ice').insert({
-              call_ref: call_id,
+              call_ref: callId,
               candidate: event.candidate.candidate,
               sdp_mid: event.candidate.sdpMid,
               sdp_mline_index: event.candidate.sdpMLineIndex,
@@ -132,7 +136,7 @@
           const { data, error } = await supabase
             .from('calls')
             .select('sdp_offer')
-            .eq('call_id', call_id)
+            .eq('call_id', callId)
             .single();
 
           if (error) {
@@ -153,7 +157,7 @@
 
             await supabase.from('calls')
               .update({ sdp_answer: answer.sdp })
-              .eq('call_id', call_id);
+              .eq('call_id', callId);
 
             setTexts('connected');
             pollIceCandidates('visitor');
@@ -176,7 +180,7 @@
         pc?.close();
         localStream?.getTracks().forEach(track => track.stop());
 
-        await supabase.from('calls').update({ status: 'ended' }).eq('call_id', call_id);
+        await supabase.from('calls').update({ status: 'ended' }).eq('call_id', callId);
         console.log("✅ Çağrı sonlandırıldı.");
       } catch (e) {
         console.error("❌ endCall error:", e);
