@@ -110,7 +110,7 @@
       avatarDiv.textContent = AVATAR_LETTERS[msg.sender] || msg.sender[0].toUpperCase();
       const bubble = document.createElement('div');
       bubble.className = 'message-bubble';
-      bubble.innerHTML = `<span>${msg.text}</span><div class="msg-meta">${formatTime(msg.sent_at)}</div>`;
+      bubble.innerHTML = `<span>${msg.content}</span><div class="msg-meta">${formatTime(msg.sent_at)}</div>`;
       row.appendChild(avatarDiv);
       row.appendChild(bubble);
       messagesDiv.appendChild(row);
