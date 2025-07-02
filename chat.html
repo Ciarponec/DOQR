@@ -140,10 +140,14 @@
       sendBtn.disabled = true;
       try {
         const resp = await fetch('https://npvwenwghmxmrzqbfgbq.functions.supabase.co/send-chat-message', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ring_id, sender, text })
-        });
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    ring_id,
+    sender,
+    content: text  // ✅ BURASI 'text' DEĞİL 'content' OLMALI
+  })
+});
         const res = await resp.json();
         if (!resp.ok || !res.success) {
           alert(res.error || TEXTS.error_send[lang]);
