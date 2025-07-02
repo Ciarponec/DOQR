@@ -36,7 +36,7 @@
     <div id="communication-options" class="hidden">
       <p id="commOptionsTitle">Görüşme seçenekleri:</p>
       <button id="chatBtn" class="call-btn">💬 Yazılı Chat</button>
-      <button id="voiceBtn" class="call-btn hidden">🔊 Sesli Görüşme</button>
+      <button id="callBtn" class="call-btn hidden">📞 Telefonla Ara</button>
     </div>
   </div>
 
@@ -54,7 +54,7 @@
       status_success: { tr: "✅ Zil başarıyla çalındı!", en: "✅ The bell rang successfully!", ru: "✅ Звонок успешно отправлен!" },
       comm_options: { tr: "Görüşme seçenekleri:", en: "Communication options:", ru: "Варианты связи:" },
       chat: { tr: "💬 Yazılı Chat", en: "💬 Text Chat", ru: "💬 Текстовый чат" },
-      voice: { tr: "🔊 Sesli Görüşme", en: "🔊 Voice Call", ru: "🔊 Аудиозвонок" },
+      call: { tr: "📞 Telefonla Ara", en: "📞 Call", ru: "📞 Позвонить" },
       net_error: { tr: "❌ Ağ hatası: ", en: "❌ Network error: ", ru: "❌ Сетевая ошибка: " }
     };
 
@@ -69,7 +69,7 @@
       document.getElementById('ringBtn').textContent = TEXTS.ring_btn[lang];
       document.getElementById('commOptionsTitle').textContent = TEXTS.comm_options[lang];
       document.getElementById('chatBtn').textContent = TEXTS.chat[lang];
-      document.getElementById('voiceBtn').textContent = TEXTS.voice[lang];
+      document.getElementById('callBtn').textContent = TEXTS.call[lang];
     }
     setTexts();
 
@@ -79,74 +79,68 @@
       setTexts();
     };
 
-    let sessionId = null;
+    let ringId = null;
 
     async function ringBell() {
-  const name = document.getElementById('visitorName').value;
-  const message = document.getElementById('visitorMessage').value;
-  const qr_token = new URLSearchParams(window.location.search).get('qr');
-  const status = document.getElementById('status');
-  const ringBtn = document.getElementById('ringBtn');
+      const name = document.getElementById('visitorName').value;
+      const message = document.getElementById('visitorMessage').value;
+      const qr_token = new URLSearchParams(window.location.search).get('qr');
+      const status = document.getElementById('status');
+      const ringBtn = document.getElementById('ringBtn');
 
-  ringBtn.disabled = true;
-  status.textContent = TEXTS.status_sending[lang];
+      ringBtn.disabled = true;
+      status.textContent = TEXTS.status_sending[lang];
 
-  if (!qr_token) {
-    ringBtn.disabled = false;
-    console.error("❌ QR token eksik!");
-    return status.textContent = TEXTS.status_noqr[lang];
-  }
+      if (!qr_token) {
+        ringBtn.disabled = false;
+        console.error("❌ QR token eksik!");
+        return status.textContent = TEXTS.status_noqr[lang];
+      }
 
-  const payload = { qr_token, visitor_name: name || null, visitor_message: message || null };
+      const payload = { qr_token, visitor_name: name || null, visitor_message: message || null };
 
-  try {
-    console.log("📤 Gönderilen payload:", payload);
-    const res = await fetch('https://npvwenwghmxmrzqbfgbq.supabase.co/functions/v1/ring', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-
-    console.log("⬅️ HTTP Durumu:", res.status, res.statusText);
-    const result = await res.json();
-    console.log("⬅️ Dönen JSON:", result);
-
-    if (!res.ok || !result.success) {
-      ringBtn.disabled = false;
-      console.error("❌ Zil çalma başarısız, hata:", result.error || "Bilinmeyen hata");
-      return status.textContent = `❌ ${result.error || 'Zil çalma başarısız.'}`;
-    }
-
-    sessionId = result.session_id;
-    status.textContent = TEXTS.status_success[lang];
-    document.getElementById('communication-options').classList.remove('hidden');
-
-    if (isIOS) {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach(track => track.stop());
-        console.log("📱 iOS ses erişimi verildi.");
+        const res = await fetch('https://npvwenwghmxmrzqbfgbq.supabase.co/functions/v1/ring', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const result = await res.json();
+        if (!res.ok || !result.success) {
+          ringBtn.disabled = false;
+          return status.textContent = `❌ ${result.error || 'Zil çalma başarısız.'}`;
+        }
+
+        ringId = result.ring_id;
+        status.textContent = TEXTS.status_success[lang];
+        document.getElementById('communication-options').classList.remove('hidden');
+
+        document.getElementById('chatBtn').onclick = () => {
+          window.location.href = `chat.html?ring_id=${ringId}&lang=${lang}`;
+        };
+
+        // get_owner_info_by_door ile arama izni kontrolü
+        const ownerRes = await fetch('https://npvwenwghmxmrzqbfgbq.supabase.co/functions/v1/get_owner_info_by_door', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ qr_token })
+        });
+
+        const ownerInfo = await ownerRes.json();
+        if (ownerInfo.allow_calls && ownerInfo.phone_number) {
+          const callBtn = document.getElementById('callBtn');
+          callBtn.classList.remove('hidden');
+          callBtn.onclick = () => {
+            window.location.href = `tel:${ownerInfo.phone_number}`;
+          };
+        }
+
       } catch (e) {
-        alert("Lütfen iOS cihazınızda mikrofon erişimine izin verin.");
-        console.error("📱 iOS mikrofon izni reddedildi:", e);
+        ringBtn.disabled = false;
+        status.textContent = TEXTS.net_error[lang] + (e.message || e);
       }
     }
-
-    document.getElementById('chatBtn').onclick = () => {
-      window.location.href = `chat.html?session_id=${sessionId}&lang=${lang}`;
-    };
-
-    document.getElementById('voiceBtn').classList.remove('hidden');
-    document.getElementById('voiceBtn').onclick = () => {
-      window.location.href = `visitor-call.html?session_id=${sessionId}&type=voice&lang=${lang}`;
-    };
-
-  } catch (e) {
-    ringBtn.disabled = false;
-    console.error("❌ Ağ hatası veya beklenmeyen hata:", e);
-    status.textContent = TEXTS.net_error[lang] + (e.message || e);
-  }
-}
   </script>
 </body>
 </html>
