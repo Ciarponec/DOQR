@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'app_config.dart';
 import 'screens/auth_screen.dart';
 import 'screens/chat_screen.dart';
+import 'screens/doors_manage_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/qr_ring_screen.dart';
 import 'screens/qr_token_manage_screen.dart';
@@ -31,6 +32,7 @@ class DoqrApp extends StatelessWidget {
       routes: {
         '/': (_) => const AuthGate(),
         '/home': (_) => const HomeScreen(),
+        '/doors-manage': (_) => const DoorsManageScreen(),
         '/qr-ring': (_) => const QrRingScreen(),
         '/share-accept': (_) => const ShareAcceptScreen(),
         '/share-create': (_) => const ShareCreateScreen(),

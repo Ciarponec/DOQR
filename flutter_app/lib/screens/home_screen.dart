@@ -31,6 +31,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           final items = snapshot.data ?? [];
           return ListView(
             children: [
+              ListTile(title: const Text('Kapilarim'), onTap: () => Navigator.pushNamed(context, '/doors-manage')),
               ListTile(title: const Text('QR ile ring testi'), onTap: () => Navigator.pushNamed(context, '/qr-ring')),
               ListTile(title: const Text('QR token yonetimi'), onTap: () => Navigator.pushNamed(context, '/qr-token-manage')),
               ListTile(title: const Text('Share token olustur'), onTap: () => Navigator.pushNamed(context, '/share-create')),

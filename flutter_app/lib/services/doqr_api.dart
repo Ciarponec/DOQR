@@ -1,11 +1,28 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/chat_message_item.dart';
+import '../models/door_item.dart';
 import '../models/ring_item.dart';
 
 class DoqrApi {
   final SupabaseClient client;
   DoqrApi(this.client);
+
+  Future<List<DoorItem>> listDoors() async {
+    final rows = await client.from('doors').select().order('label');
+    return (rows as List).cast<Map<String, dynamic>>().map(DoorItem.fromJson).toList();
+  }
+
+  Future<DoorItem> createDoor({required String label, String? addressText}) async {
+    final uid = client.auth.currentUser?.id;
+    if (uid == null) throw Exception('Not authenticated');
+    final row = await client
+        .from('doors')
+        .insert({'owner_user_id': uid, 'label': label, 'address_text': addressText})
+        .select()
+        .single();
+    return DoorItem.fromJson(row);
+  }
 
   Future<List<RingItem>> listRings() async {
     final rows = await client.from('rings').select().order('created_at', ascending: false);

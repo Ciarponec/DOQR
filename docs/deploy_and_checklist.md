@@ -44,3 +44,21 @@ supabase functions deploy device-report-unlock --project-ref wlfspfxyykdxpfhjqpk
 - Visitor session token expires (2 hours default).
 - Unlock request TTL default 30 seconds.
 - All unlock events in `door_unlock_logs`.
+## Additional Completed Items
+
+- Door ID manual girisi kaldirildi: Flutter UI artik door name/selection kullaniyor.
+- Visitor web anon key hardcoded degil: `visitor-config` function'dan runtime cekiliyor.
+- Guculendirilmis ring rate-limit katmani eklendi (`ring_rate_limits`).
+- Expired token/ring cleanup function eklendi (`cleanup-expired`).
+- Smoke test script eklendi: `scripts/smoke_test.ps1`.
+- Flutter CI eklendi: `.github/workflows/flutter_ci.yml`.
+
+### Cleanup function run
+```bash
+curl -X POST https://wlfspfxyykdxpfhjqpkg.supabase.co/functions/v1/cleanup-expired
+```
+
+### Visitor config function
+```bash
+curl https://wlfspfxyykdxpfhjqpkg.supabase.co/functions/v1/visitor-config
+```

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../models/door_item.dart';
 import '../services/providers.dart';
 
 class ShareCreateScreen extends ConsumerStatefulWidget {
@@ -11,9 +12,9 @@ class ShareCreateScreen extends ConsumerStatefulWidget {
 }
 
 class _ShareCreateScreenState extends ConsumerState<ShareCreateScreen> {
-  final doorId = TextEditingController();
   final pin = TextEditingController();
   String? token;
+  DoorItem? selectedDoor;
 
   @override
   Widget build(BuildContext context) {
@@ -24,13 +25,26 @@ class _ShareCreateScreenState extends ConsumerState<ShareCreateScreen> {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            TextField(controller: doorId, decoration: const InputDecoration(labelText: 'Door ID')),
+            FutureBuilder(
+              future: api.listDoors(),
+              builder: (context, snapshot) {
+                final doors = snapshot.data ?? <DoorItem>[];
+                if (doors.isEmpty) return const Text('Once Kapi Ekle');
+                selectedDoor ??= doors.first;
+                return DropdownButtonFormField<DoorItem>(
+                  value: selectedDoor,
+                  items: doors.map((d) => DropdownMenuItem(value: d, child: Text(d.label))).toList(),
+                  onChanged: (v) => setState(() => selectedDoor = v),
+                  decoration: const InputDecoration(labelText: 'Kapi Secimi'),
+                );
+              },
+            ),
             const SizedBox(height: 8),
             TextField(controller: pin, decoration: const InputDecoration(labelText: 'PIN (optional)')),
             const SizedBox(height: 8),
             FilledButton(
-              onPressed: () async {
-                final res = await api.createShareToken(doorId: doorId.text.trim(), pin: pin.text.trim().isEmpty ? null : pin.text.trim());
+              onPressed: selectedDoor == null ? null : () async {
+                final res = await api.createShareToken(doorId: selectedDoor!.id, pin: pin.text.trim().isEmpty ? null : pin.text.trim());
                 setState(() => token = res['share_token'] as String);
               },
               child: const Text('Share Token Uret'),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../models/door_item.dart';
 import '../services/providers.dart';
 
 class QrTokenManageScreen extends ConsumerStatefulWidget {
@@ -11,9 +12,9 @@ class QrTokenManageScreen extends ConsumerStatefulWidget {
 }
 
 class _QrTokenManageScreenState extends ConsumerState<QrTokenManageScreen> {
-  final doorId = TextEditingController();
   final tokenId = TextEditingController();
   String? generatedToken;
+  DoorItem? selectedDoor;
 
   @override
   Widget build(BuildContext context) {
@@ -24,11 +25,24 @@ class _QrTokenManageScreenState extends ConsumerState<QrTokenManageScreen> {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            TextField(controller: doorId, decoration: const InputDecoration(labelText: 'Door ID')),
+            FutureBuilder(
+              future: api.listDoors(),
+              builder: (context, snapshot) {
+                final doors = snapshot.data ?? <DoorItem>[];
+                if (doors.isEmpty) return const Text('Once Kapi Ekle');
+                selectedDoor ??= doors.first;
+                return DropdownButtonFormField<DoorItem>(
+                  value: selectedDoor,
+                  items: doors.map((d) => DropdownMenuItem(value: d, child: Text(d.label))).toList(),
+                  onChanged: (v) => setState(() => selectedDoor = v),
+                  decoration: const InputDecoration(labelText: 'Kapi Secimi'),
+                );
+              },
+            ),
             const SizedBox(height: 8),
             FilledButton(
-              onPressed: () async {
-                final res = await api.createQrToken(doorId: doorId.text.trim());
+              onPressed: selectedDoor == null ? null : () async {
+                final res = await api.createQrToken(doorId: selectedDoor!.id);
                 setState(() {
                   generatedToken = res['qr_token'] as String;
                   tokenId.text = res['token_id'] as String;

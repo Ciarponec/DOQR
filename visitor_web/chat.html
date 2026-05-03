@@ -24,7 +24,9 @@
     import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
     const SUPABASE_URL = 'https://wlfspfxyykdxpfhjqpkg.supabase.co';
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndsZnNwZnh5eWtkeHBmaGpxcGtnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc3OTkzMjcsImV4cCI6MjA5MzM3NTMyN30.dCZX4qm3ynKObG4dMvwo_vcQPK_LWmE-RyCiMU-shaE';
+    const cfgRes = await fetch(`${SUPABASE_URL}/functions/v1/visitor-config`);
+    const cfg = await cfgRes.json();
+    const SUPABASE_ANON_KEY = cfg.supabase_anon_key;
 
     const p = new URLSearchParams(location.search);
     const ringId = p.get('ring_id');
