@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>DOQR Visitor</title>
+  <style>
+    body{font-family:system-ui,sans-serif;max-width:680px;margin:24px auto;padding:0 12px}
+    input,button{padding:10px;font-size:16px;width:100%;margin-top:8px}
+    .ok{color:#0b7a35}.err{color:#b00020}
+  </style>
+</head>
+<body>
+  <h1>DOQR Visitor Ring</h1>
+  <p>QR linkinde <code>?qr=...</code> token olmalı.</p>
+  <input id="alias" placeholder="Adınız (opsiyonel)" />
+  <button id="ringBtn">Zili Çal</button>
+  <p id="status"></p>
+
+  <script>
+    const SUPABASE_URL = "https://wlfspfxyykdxpfhjqpkg.supabase.co";
+    const ringBtn = document.getElementById('ringBtn');
+    const statusEl = document.getElementById('status');
+
+    ringBtn.onclick = async () => {
+      const qr = new URLSearchParams(location.search).get('qr');
+      const alias = document.getElementById('alias').value.trim();
+      if (!qr) { statusEl.className='err'; statusEl.textContent='QR token eksik'; return; }
+      statusEl.textContent='Gonderiliyor...';
+
+      try {
+        const res = await fetch(`${SUPABASE_URL}/functions/v1/qr-ring-create`, {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ qr_token: qr, visitor_alias: alias || null })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Ring failed');
+        statusEl.className='ok'; statusEl.textContent='Ring olustu. Chate yonlendiriliyor...';
+        location.href = `./chat.html?ring_id=${encodeURIComponent(data.ring_id)}&visitor_session_token=${encodeURIComponent(data.visitor_session_token)}`;
+      } catch (e) {
+        statusEl.className='err'; statusEl.textContent = e.message || String(e);
+      }
+    };
+  </script>
+</body>
+</html>
