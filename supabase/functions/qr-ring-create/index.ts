@@ -1,4 +1,4 @@
-import { json, serviceClient, sha256Hex } from "../_shared/utils.ts";
+import { json, randomSecret, serviceClient, sha256Hex } from "../_shared/utils.ts";
 
 Deno.serve(async (req) => {
   try {
@@ -21,12 +21,18 @@ Deno.serve(async (req) => {
       return json(410, { error: "QR expired" });
     }
 
+    const visitorSessionToken = randomSecret(24);
+    const visitorSessionHash = await sha256Hex(visitorSessionToken);
+    const sessionExpiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+
     const { data: ring, error: ringErr } = await admin
       .from("rings")
       .insert({
         door_id: tokenRow.door_id,
         visitor_alias: visitor_alias ?? null,
         source_token_hash: tokenHash,
+        visitor_session_token_hash: visitorSessionHash,
+        visitor_session_expires_at: sessionExpiresAt,
         status: "pending",
       })
       .select("id, door_id, status, created_at")
@@ -34,14 +40,14 @@ Deno.serve(async (req) => {
 
     if (ringErr) return json(500, { error: ringErr.message });
 
-    await admin.functions.invoke("notify-ring", {
-      body: { ring_id: ring.id },
-    });
+    await admin.functions.invoke("notify-ring", { body: { ring_id: ring.id } });
 
     return json(200, {
       ring_id: ring.id,
       door_id: ring.door_id,
       chat_session: ring.id,
+      visitor_session_token: visitorSessionToken,
+      visitor_session_expires_at: sessionExpiresAt,
       status: ring.status,
       created_at: ring.created_at,
     });
