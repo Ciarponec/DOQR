@@ -7,7 +7,9 @@ import 'screens/auth_screen.dart';
 import 'screens/chat_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/qr_ring_screen.dart';
+import 'screens/qr_token_manage_screen.dart';
 import 'screens/share_accept_screen.dart';
+import 'screens/share_create_screen.dart';
 import 'screens/visitor_chat_screen.dart';
 
 Future<void> main() async {
@@ -31,6 +33,8 @@ class DoqrApp extends StatelessWidget {
         '/home': (_) => const HomeScreen(),
         '/qr-ring': (_) => const QrRingScreen(),
         '/share-accept': (_) => const ShareAcceptScreen(),
+        '/share-create': (_) => const ShareCreateScreen(),
+        '/qr-token-manage': (_) => const QrTokenManageScreen(),
       },
       onGenerateRoute: (settings) {
         if (settings.name == '/chat') {
@@ -39,12 +43,7 @@ class DoqrApp extends StatelessWidget {
         }
         if (settings.name == '/visitor-chat') {
           final args = settings.arguments as Map<String, dynamic>;
-          return MaterialPageRoute(
-            builder: (_) => VisitorChatScreen(
-              ringId: args['ring_id'] as String,
-              visitorSessionToken: args['visitor_session_token'] as String,
-            ),
-          );
+          return MaterialPageRoute(builder: (_) => VisitorChatScreen(ringId: args['ring_id'] as String, visitorSessionToken: args['visitor_session_token'] as String));
         }
         return null;
       },

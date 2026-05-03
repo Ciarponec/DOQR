@@ -17,13 +17,25 @@ Deno.serve(async (req) => {
     if (tokenErr) return json(500, { error: tokenErr.message });
     if (!tokenRow) return json(404, { error: "Invalid QR" });
     if (tokenRow.revoked_at) return json(410, { error: "QR revoked" });
-    if (tokenRow.expires_at && new Date(tokenRow.expires_at).getTime() < Date.now()) {
-      return json(410, { error: "QR expired" });
-    }
+    if (tokenRow.expires_at && new Date(tokenRow.expires_at).getTime() < Date.now()) return json(410, { error: "QR expired" });
+
+    const now = Date.now();
+    const oneMinuteAgo = new Date(now - 60_000).toISOString();
+
+    const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+    const ipHash = await sha256Hex(ip);
+
+    const { count: ringCount, error: cntErr } = await admin
+      .from("rings")
+      .select("id", { count: "exact", head: true })
+      .eq("door_id", tokenRow.door_id)
+      .gte("created_at", oneMinuteAgo);
+    if (cntErr) return json(500, { error: cntErr.message });
+    if ((ringCount ?? 0) > 12) return json(429, { error: "Too many ring attempts. Try again shortly." });
 
     const visitorSessionToken = randomSecret(24);
     const visitorSessionHash = await sha256Hex(visitorSessionToken);
-    const sessionExpiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+    const sessionExpiresAt = new Date(now + 2 * 60 * 60 * 1000).toISOString();
 
     const { data: ring, error: ringErr } = await admin
       .from("rings")
@@ -31,6 +43,7 @@ Deno.serve(async (req) => {
         door_id: tokenRow.door_id,
         visitor_alias: visitor_alias ?? null,
         source_token_hash: tokenHash,
+        visitor_ip_hash: ipHash,
         visitor_session_token_hash: visitorSessionHash,
         visitor_session_expires_at: sessionExpiresAt,
         status: "pending",
@@ -39,7 +52,6 @@ Deno.serve(async (req) => {
       .single();
 
     if (ringErr) return json(500, { error: ringErr.message });
-
     await admin.functions.invoke("notify-ring", { body: { ring_id: ring.id } });
 
     return json(200, {

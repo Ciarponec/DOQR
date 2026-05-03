@@ -19,7 +19,7 @@ supabase functions deploy qr-ring-create --project-ref wlfspfxyykdxpfhjqpkg
 supabase functions deploy visitor-chat-send --project-ref wlfspfxyykdxpfhjqpkg
 supabase functions deploy notify-ring --project-ref wlfspfxyykdxpfhjqpkg
 supabase functions deploy chat-send --project-ref wlfspfxyykdxpfhjqpkg
-supabase functions deploy door-share-create --project-ref wlfspfxyykdxpfhjqpkg
+supabase functions deploy door-share-create --project-ref wlfspfxyykdxpfhjqpkg`nsupabase functions deploy door-qr-token-create --project-ref wlfspfxyykdxpfhjqpkg`nsupabase functions deploy door-qr-token-revoke --project-ref wlfspfxyykdxpfhjqpkg
 supabase functions deploy door-share-accept --project-ref wlfspfxyykdxpfhjqpkg
 supabase functions deploy register-push-token --project-ref wlfspfxyykdxpfhjqpkg
 supabase functions deploy door-unlock-request --project-ref wlfspfxyykdxpfhjqpkg

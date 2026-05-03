@@ -1,4 +1,4 @@
-import { json, requireUser, serviceClient, sha256Hex } from "../_shared/utils.ts";
+import { json, requireUser, serviceClient } from "../_shared/utils.ts";
 
 Deno.serve(async (req) => {
   try {
@@ -8,12 +8,14 @@ Deno.serve(async (req) => {
     if (!share_token) return json(400, { error: "share_token required" });
 
     const admin = serviceClient();
+    const { sha256Hex } = await import("../_shared/utils.ts");
     const tokenHash = await sha256Hex(share_token);
     const { data: tokenRow, error: tokenErr } = await admin
       .from("door_share_tokens")
-      .select("id, door_id, pin_hash, expires_at, revoked_at, used_count, max_uses")
+      .select("id, door_id, pin_hash, expires_at, revoked_at, used_count, max_uses, created_by")
       .eq("token_hash", tokenHash)
       .maybeSingle();
+
     if (tokenErr) return json(500, { error: tokenErr.message });
     if (!tokenRow) return json(404, { error: "Token invalid" });
     if (tokenRow.revoked_at) return json(410, { error: "Token revoked" });
@@ -32,7 +34,7 @@ Deno.serve(async (req) => {
         door_id: tokenRow.door_id,
         user_id: user.id,
         permission: "notify_chat",
-        granted_by: user.id,
+        granted_by: tokenRow.created_by,
       }, { onConflict: "door_id,user_id" });
     if (upsertErr) return json(500, { error: upsertErr.message });
 
