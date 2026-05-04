@@ -14,7 +14,7 @@ class ShareCreateScreen extends ConsumerStatefulWidget {
 class _ShareCreateScreenState extends ConsumerState<ShareCreateScreen> {
   final pin = TextEditingController();
   String? token;
-  DoorItem? selectedDoor;
+  String? selectedDoorId;
 
   @override
   Widget build(BuildContext context) {
@@ -25,16 +25,25 @@ class _ShareCreateScreenState extends ConsumerState<ShareCreateScreen> {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            FutureBuilder(
+            FutureBuilder<List<DoorItem>>(
               future: api.listDoors(),
               builder: (context, snapshot) {
+                if (snapshot.connectionState != ConnectionState.done) {
+                  return const CircularProgressIndicator();
+                }
+                if (snapshot.hasError) {
+                  return Text('Kapilar alinamadi: ${snapshot.error}');
+                }
                 final doors = snapshot.data ?? <DoorItem>[];
                 if (doors.isEmpty) return const Text('Once Kapi Ekle');
-                selectedDoor ??= doors.first;
-                return DropdownButtonFormField<DoorItem>(
-                  value: selectedDoor,
-                  items: doors.map((d) => DropdownMenuItem(value: d, child: Text(d.label))).toList(),
-                  onChanged: (v) => setState(() => selectedDoor = v),
+                selectedDoorId ??= doors.first.id;
+                if (!doors.any((d) => d.id == selectedDoorId)) {
+                  selectedDoorId = doors.first.id;
+                }
+                return DropdownButtonFormField<String>(
+                  value: selectedDoorId,
+                  items: doors.map((d) => DropdownMenuItem(value: d.id, child: Text(d.label))).toList(),
+                  onChanged: (v) => setState(() => selectedDoorId = v),
                   decoration: const InputDecoration(labelText: 'Kapi Secimi'),
                 );
               },
@@ -43,8 +52,8 @@ class _ShareCreateScreenState extends ConsumerState<ShareCreateScreen> {
             TextField(controller: pin, decoration: const InputDecoration(labelText: 'PIN (optional)')),
             const SizedBox(height: 8),
             FilledButton(
-              onPressed: selectedDoor == null ? null : () async {
-                final res = await api.createShareToken(doorId: selectedDoor!.id, pin: pin.text.trim().isEmpty ? null : pin.text.trim());
+              onPressed: selectedDoorId == null ? null : () async {
+                final res = await api.createShareToken(doorId: selectedDoorId!, pin: pin.text.trim().isEmpty ? null : pin.text.trim());
                 setState(() => token = res['share_token'] as String);
               },
               child: const Text('Share Token Uret'),

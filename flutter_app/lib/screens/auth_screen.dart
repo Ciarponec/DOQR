@@ -13,24 +13,68 @@ class _AuthScreenState extends State<AuthScreen> {
   final password = TextEditingController();
   bool loading = false;
   String? error;
+  String? info;
 
-  Future<void> signInOrSignUp() async {
-    setState(() { loading = true; error = null; });
+  Future<void> signIn() async {
+    final e = email.text.trim();
+    final p = password.text;
+    if (e.isEmpty || p.isEmpty) {
+      setState(() => error = 'Email ve sifre zorunlu.');
+      return;
+    }
+    setState(() {
+      loading = true;
+      error = null;
+      info = null;
+    });
     try {
-      final client = Supabase.instance.client;
-      await client.auth.signInWithPassword(email: email.text.trim(), password: password.text);
-    } catch (_) {
-      try {
-        await Supabase.instance.client.auth.signUp(email: email.text.trim(), password: password.text);
-      } catch (e) {
-        error = e.toString();
+      await Supabase.instance.client.auth.signInWithPassword(email: e, password: p);
+      if (mounted) {
+        Navigator.of(context).pushReplacementNamed('/home');
       }
+    } on AuthException catch (e) {
+      setState(() => error = e.message);
+    } catch (e) {
+      setState(() => error = e.toString());
     }
     if (mounted) {
       setState(() => loading = false);
-      if (Supabase.instance.client.auth.currentSession != null) {
-        Navigator.of(context).pushReplacementNamed('/home');
+    }
+  }
+
+  Future<void> signUp() async {
+    final e = email.text.trim();
+    final p = password.text;
+    if (e.isEmpty || p.isEmpty) {
+      setState(() => error = 'Email ve sifre zorunlu.');
+      return;
+    }
+    if (p.length < 6) {
+      setState(() => error = 'Sifre en az 6 karakter olmali.');
+      return;
+    }
+    setState(() {
+      loading = true;
+      error = null;
+      info = null;
+    });
+    try {
+      final res = await Supabase.instance.client.auth.signUp(email: e, password: p);
+      final hasSession = res.session != null || Supabase.instance.client.auth.currentSession != null;
+      if (hasSession) {
+        if (mounted) {
+          Navigator.of(context).pushReplacementNamed('/home');
+        }
+      } else {
+        setState(() => info = 'Kayit alindi. Lutfen email kutundan dogrulama yapip giris yap.');
       }
+    } on AuthException catch (e) {
+      setState(() => error = e.message);
+    } catch (e) {
+      setState(() => error = e.toString());
+    }
+    if (mounted) {
+      setState(() => loading = false);
     }
   }
 
@@ -46,7 +90,28 @@ class _AuthScreenState extends State<AuthScreen> {
             const SizedBox(height: 12),
             TextField(controller: password, obscureText: true, decoration: const InputDecoration(labelText: 'Password')),
             const SizedBox(height: 16),
-            FilledButton(onPressed: loading ? null : signInOrSignUp, child: Text(loading ? 'Bekleyin...' : 'Giris / Kayit')),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton(
+                    onPressed: loading ? null : signIn,
+                    child: Text(loading ? 'Bekleyin...' : 'Giris Yap'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: loading ? null : signUp,
+                    child: const Text('Kayit Ol'),
+                  ),
+                ),
+              ],
+            ),
+            if (info != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Text(info!, style: const TextStyle(color: Colors.green)),
+              ),
             if (error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(error!, style: const TextStyle(color: Colors.red))),
           ],
         ),

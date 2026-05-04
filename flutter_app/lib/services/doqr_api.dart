@@ -9,19 +9,30 @@ class DoqrApi {
   DoqrApi(this.client);
 
   Future<List<DoorItem>> listDoors() async {
-    final rows = await client.from('doors').select().order('label');
-    return (rows as List).cast<Map<String, dynamic>>().map(DoorItem.fromJson).toList();
+    final res = await client.functions.invoke('door-list', method: HttpMethod.get);
+    if (res.status != 200) throw Exception(res.data.toString());
+    final rows = ((res.data as Map<String, dynamic>)['doors'] as List)
+        .cast<Map<String, dynamic>>();
+    return rows.map(DoorItem.fromJson).toList();
   }
 
   Future<DoorItem> createDoor({required String label, String? addressText}) async {
-    final uid = client.auth.currentUser?.id;
-    if (uid == null) throw Exception('Not authenticated');
-    final row = await client
-        .from('doors')
-        .insert({'owner_user_id': uid, 'label': label, 'address_text': addressText})
-        .select()
-        .single();
-    return DoorItem.fromJson(row);
+    final res = await client.functions.invoke('door-create', body: {
+      'label': label,
+      'address_text': addressText,
+    });
+    if (res.status != 200) throw Exception(res.data.toString());
+    return DoorItem.fromJson(Map<String, dynamic>.from(res.data as Map));
+  }
+
+  Future<DoorItem> updateDoor({required String doorId, required String label, String? addressText}) async {
+    final res = await client.functions.invoke('door-update', body: {
+      'door_id': doorId,
+      'label': label,
+      'address_text': addressText,
+    });
+    if (res.status != 200) throw Exception(res.data.toString());
+    return DoorItem.fromJson(Map<String, dynamic>.from(res.data as Map));
   }
 
   Future<List<RingItem>> listRings() async {
@@ -81,3 +92,6 @@ class DoqrApi {
     if (res.status != 200) throw Exception(res.data.toString());
   }
 }
+
+
+
