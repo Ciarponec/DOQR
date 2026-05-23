@@ -12,6 +12,7 @@ import 'screens/qr_token_manage_screen.dart';
 import 'screens/share_accept_screen.dart';
 import 'screens/share_create_screen.dart';
 import 'screens/visitor_chat_screen.dart';
+import 'ui/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -28,7 +29,7 @@ class DoqrApp extends StatelessWidget {
     return MaterialApp(
       title: 'DOQR',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(colorSchemeSeed: Colors.blue, useMaterial3: true),
+      theme: buildDoqrTheme(),
       routes: {
         '/': (_) => const AuthGate(),
         '/home': (_) => const HomeScreen(),

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../widgets/app_shell.dart';
+
 class DoorQrScreen extends StatelessWidget {
   final String doorLabel;
   final String qrUrl;
@@ -10,22 +12,24 @@ class DoorQrScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text('QR - $doorLabel')),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            QrImageView(data: qrUrl, version: QrVersions.auto, size: 260),
-            const SizedBox(height: 16),
-            const Text('QR Linki'),
-            SelectableText(qrUrl),
-            const SizedBox(height: 8),
-            const Text('Token ID'),
-            SelectableText(tokenId),
-          ],
-        ),
+    return AppShell(
+      title: 'QR • $doorLabel',
+      child: ListView(
+        children: [
+          ElevCard(
+            child: Column(
+              children: [
+                QrImageView(data: qrUrl, version: QrVersions.auto, size: 250),
+                const SizedBox(height: 14),
+                const Align(alignment: Alignment.centerLeft, child: Text('QR Linki')),
+                SelectableText(qrUrl),
+                const SizedBox(height: 8),
+                const Align(alignment: Alignment.centerLeft, child: Text('Token ID')),
+                SelectableText(tokenId),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

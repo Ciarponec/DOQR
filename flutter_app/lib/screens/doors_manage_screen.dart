@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../app_config.dart';
 import '../models/door_item.dart';
 import '../services/providers.dart';
+import '../widgets/app_shell.dart';
 import 'door_qr_screen.dart';
 
 class DoorsManageScreen extends ConsumerStatefulWidget {
@@ -27,17 +28,17 @@ class _DoorsManageScreenState extends ConsumerState<DoorsManageScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Kapı Düzenle'),
+        title: const Text('Kapi Duzenle'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(controller: editLabel, decoration: const InputDecoration(labelText: 'Kapı İsmi')),
+            TextField(controller: editLabel, decoration: const InputDecoration(labelText: 'Kapi Ismi')),
             const SizedBox(height: 8),
             TextField(controller: editAddr, decoration: const InputDecoration(labelText: 'Adres')),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('İptal')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Iptal')),
           FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Kaydet')),
         ],
       ),
@@ -49,8 +50,10 @@ class _DoorsManageScreenState extends ConsumerState<DoorsManageScreen> {
         label: editLabel.text.trim(),
         addressText: editAddr.text.trim().isEmpty ? null : editAddr.text.trim(),
       );
-      refreshKey++;
-      if (mounted) setState(() {});
+      if (mounted) {
+        refreshKey++;
+        setState(() {});
+      }
     }
   }
 
@@ -60,31 +63,24 @@ class _DoorsManageScreenState extends ConsumerState<DoorsManageScreen> {
     final qrToken = res['qr_token'] as String;
     final tokenId = res['token_id'] as String;
     final url = '${AppConfig.visitorBaseUrl}?qr=$qrToken';
-
     if (!mounted) return;
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => DoorQrScreen(doorLabel: door.label, qrUrl: url, tokenId: tokenId),
-      ),
-    );
+    Navigator.push(context, MaterialPageRoute(builder: (_) => DoorQrScreen(doorLabel: door.label, qrUrl: url, tokenId: tokenId)));
   }
 
   @override
   Widget build(BuildContext context) {
     final api = ref.read(doqrApiProvider);
-    return Scaffold(
-      appBar: AppBar(title: const Text('Kapılarım')),
-      body: Column(
+    return AppShell(
+      title: 'Kapilarim',
+      child: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.all(12),
+          ElevCard(
             child: Column(
               children: [
-                TextField(controller: label, decoration: const InputDecoration(labelText: 'Kapı İsmi (zorunlu)')),
+                TextField(controller: label, decoration: const InputDecoration(labelText: 'Kapi Ismi (zorunlu)')),
                 const SizedBox(height: 8),
                 TextField(controller: address, decoration: const InputDecoration(labelText: 'Adres (opsiyonel)')),
-                const SizedBox(height: 8),
+                const SizedBox(height: 10),
                 FilledButton(
                   onPressed: loading
                       ? null
@@ -98,47 +94,49 @@ class _DoorsManageScreenState extends ConsumerState<DoorsManageScreen> {
                             refreshKey++;
                             if (mounted) {
                               setState(() {});
-                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Kapı eklendi')));
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Kapi eklendi')));
                             }
                           } catch (e) {
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Kapı eklenemedi: $e')));
-                            }
+                            if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Kapi eklenemedi: $e')));
                           } finally {
                             if (mounted) setState(() => loading = false);
                           }
                         },
-                  child: const Text('Kapı Ekle'),
+                  child: const Text('Kapi Ekle'),
                 ),
               ],
             ),
           ),
-          const Divider(),
+          const SizedBox(height: 12),
           Expanded(
             child: FutureBuilder<List<DoorItem>>(
               key: ValueKey(refreshKey),
               future: api.listDoors(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
-                if (snapshot.hasError) return Center(child: Text('Kapı listesi alınamadı: ${snapshot.error}'));
+                if (snapshot.hasError) return Center(child: Text('Kapi listesi alinamadi: ${snapshot.error}'));
                 final doors = snapshot.data ?? [];
-                if (doors.isEmpty) return const Center(child: Text('Henüz kapı yok'));
-                return ListView(
-                  children: doors
-                      .map(
-                        (d) => ListTile(
-                          title: Text(d.label),
-                          subtitle: Text(d.addressText ?? d.id),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(icon: const Icon(Icons.qr_code), onPressed: () => _generateQr(d)),
-                              IconButton(icon: const Icon(Icons.edit), onPressed: () => _editDoor(d)),
-                            ],
-                          ),
+                if (doors.isEmpty) return const Center(child: Text('Henuz kapi yok'));
+                return ListView.separated(
+                  itemCount: doors.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 10),
+                  itemBuilder: (_, i) {
+                    final d = doors[i];
+                    return ElevCard(
+                      child: ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(d.label, style: const TextStyle(fontWeight: FontWeight.w700)),
+                        subtitle: Text(d.addressText ?? d.id),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(icon: const Icon(Icons.qr_code_2_rounded), onPressed: () => _generateQr(d)),
+                            IconButton(icon: const Icon(Icons.edit_rounded), onPressed: () => _editDoor(d)),
+                          ],
                         ),
-                      )
-                      .toList(),
+                      ),
+                    );
+                  },
                 );
               },
             ),

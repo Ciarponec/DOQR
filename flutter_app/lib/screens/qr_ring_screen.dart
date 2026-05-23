@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../services/providers.dart';
+import '../widgets/app_shell.dart';
 
 class QrRingScreen extends ConsumerStatefulWidget {
   const QrRingScreen({super.key});
@@ -18,15 +19,15 @@ class _QrRingScreenState extends ConsumerState<QrRingScreen> {
   @override
   Widget build(BuildContext context) {
     final api = ref.read(doqrApiProvider);
-    return Scaffold(
-      appBar: AppBar(title: const Text('QR -> Ring Test')),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
+    return AppShell(
+      title: 'QR ile Ring',
+      child: ElevCard(
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
             TextField(controller: qrToken, decoration: const InputDecoration(labelText: 'QR Token')),
             const SizedBox(height: 8),
-            TextField(controller: alias, decoration: const InputDecoration(labelText: 'Visitor Alias (optional)')),
+            TextField(controller: alias, decoration: const InputDecoration(labelText: 'Ziyaretci Ismi (opsiyonel)')),
             const SizedBox(height: 12),
             FilledButton(
               onPressed: loading

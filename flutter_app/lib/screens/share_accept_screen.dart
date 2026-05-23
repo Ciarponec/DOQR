@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../services/providers.dart';
+import '../widgets/app_shell.dart';
 
 class ShareAcceptScreen extends ConsumerStatefulWidget {
   const ShareAcceptScreen({super.key});
@@ -18,15 +19,15 @@ class _ShareAcceptScreenState extends ConsumerState<ShareAcceptScreen> {
   @override
   Widget build(BuildContext context) {
     final api = ref.read(doqrApiProvider);
-    return Scaffold(
-      appBar: AppBar(title: const Text('Door Share Accept')),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
+    return AppShell(
+      title: 'Share Token Kabul',
+      child: ElevCard(
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
             TextField(controller: token, decoration: const InputDecoration(labelText: 'Share Token')),
             const SizedBox(height: 8),
-            TextField(controller: pin, decoration: const InputDecoration(labelText: 'PIN (optional)')),
+            TextField(controller: pin, decoration: const InputDecoration(labelText: 'PIN (opsiyonel)')),
             const SizedBox(height: 12),
             FilledButton(
               onPressed: loading
@@ -36,7 +37,7 @@ class _ShareAcceptScreenState extends ConsumerState<ShareAcceptScreen> {
                       try {
                         await api.acceptShareToken(token: token.text.trim(), pin: pin.text.trim().isEmpty ? null : pin.text.trim());
                         if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Share accepted')));
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Paylasim kabul edildi')));
                           Navigator.pop(context);
                         }
                       } catch (e) {
@@ -45,7 +46,7 @@ class _ShareAcceptScreenState extends ConsumerState<ShareAcceptScreen> {
                         if (mounted) setState(() => loading = false);
                       }
                     },
-              child: Text(loading ? 'Bekleyin...' : 'Accept'),
+              child: Text(loading ? 'Bekleyin...' : 'Kabul Et'),
             ),
           ],
         ),
