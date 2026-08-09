@@ -1,14 +1,15 @@
-# Visitor Web (GitHub Pages)
+# DOQR ziyaretçi webi
 
-Bu klasor statik ziyaretci akisi icindir.
+Bu klasör uygulama yüklemeyen ziyaretçinin statik web deneyiminin kaynak sürümüdür. Sayfa QR tokenini doğrular, güvenlik bilgilendirmesi ve onay alır, Supabase Anonymous Auth oturumu açar ve hostun izin verdiği yazı/ses/video seçeneklerini gösterir.
 
-## Yayina alma
-1. Repo ayarlarindan GitHub Pages'i `main` branch `/visitor_web` klasoru olacak sekilde ac.
-2. `visitor_web/chat.html` icindeki `SUPABASE_ANON_KEY` degerini proje anon key ile degistir.
-3. QR koduna su formatta link koy:
-   - `https://ciarponec.github.io/DOQR/?qr=<qr_token>`
+Kurye şirketi ziyaretçinin doğrulanmamış beyanıdır. Cihaz verilerinden kurye tahmini yapılmaz; hazır not ve teslimat kodu host onayı olmadan gösterilmez.
 
-## Akis
-- `index.html`: `qr-ring-create` cagirir.
-- Basarili olursa `chat.html` sayfasina `ring_id` + `visitor_session_token` ile gecer.
-- `chat.html`: `visitor-chat-send` ile mesaj yollar, realtime ile owner mesajlarini gorur.
+## Yerel servis
+
+```powershell
+npx serve visitor_web
+```
+
+`index.html` içindeki `data-supabase-url` hedef projeyi göstermelidir. Yayın için bu klasördeki `index.html`, `chat.html`, `app.js`, `styles.css` ve `assets/` içeriği `docs/` klasörüne eşitlenir; GitHub Pages kaynağı `main /docs` seçilir.
+
+QR bağlantısı `https://<domain>/?qr=<token>` biçimindedir. Ham service-role anahtarı veya ziyaretçi oturum sırrı hiçbir zaman URL'ye eklenmez.

@@ -1,46 +1,114 @@
 <!doctype html>
-<html lang="tr">
+<html lang="tr" data-supabase-url="https://warsaqcfovasaitcwtxy.supabase.co">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>DOQR Visitor</title>
-  <style>
-    body{font-family:system-ui,sans-serif;max-width:680px;margin:24px auto;padding:0 12px}
-    input,button{padding:10px;font-size:16px;width:100%;margin-top:8px}
-    .ok{color:#0b7a35}.err{color:#b00020}
-  </style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#111936">
+  <meta name="description" content="DOQR dijital kapı zili">
+  <title>DOQR • Dijital Zil</title>
+  <link rel="icon" type="image/png" href="./assets/doqr_icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css?v=20260810">
+  <style>.media-limit{position:absolute;left:20px;top:20px;z-index:2;padding:7px 10px;border-radius:999px;background:rgba(17,25,54,.76);color:#fff;font-size:10px;font-weight:800;font-variant-numeric:tabular-nums;backdrop-filter:blur(9px)}</style>
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
 </head>
 <body>
-  <h1>DOQR Visitor Ring</h1>
-  <p>QR linkinde <code>?qr=...</code> token olmalı.</p>
-  <input id="alias" placeholder="Adınız (opsiyonel)" />
-  <button id="ringBtn">Zili Çal</button>
-  <p id="status"></p>
+  <main class="shell">
+    <header class="brand">
+      <img src="./assets/doqr_icon.png" width="48" height="48" alt="DOQR">
+      <div><strong>DOQR</strong><span>Dijital Zil</span></div>
+      <span id="secureBadge" class="secure-badge"><i></i> Güvenli oturum</span>
+    </header>
 
-  <script>
-    const SUPABASE_URL = "https://wlfspfxyykdxpfhjqpkg.supabase.co";
-    const ringBtn = document.getElementById('ringBtn');
-    const statusEl = document.getElementById('status');
+    <section id="loadingView" class="card hero-card view active" aria-live="polite">
+      <div class="loader"></div>
+      <h1>Dijital zil hazırlanıyor</h1>
+      <p>QR kodu ve güvenli bağlantı doğrulanıyor.</p>
+    </section>
 
-    ringBtn.onclick = async () => {
-      const qr = new URLSearchParams(location.search).get('qr');
-      const alias = document.getElementById('alias').value.trim();
-      if (!qr) { statusEl.className='err'; statusEl.textContent='QR token eksik'; return; }
-      statusEl.textContent='Gonderiliyor...';
+    <section id="errorView" class="card view" role="alert">
+      <div class="state-icon danger">!</div>
+      <h1>Bağlantı kurulamadı</h1>
+      <p id="errorText">Lütfen QR kodunu yeniden tarayın.</p>
+      <button class="button secondary" type="button" onclick="location.reload()">Tekrar dene</button>
+    </section>
 
-      try {
-        const res = await fetch(`${SUPABASE_URL}/functions/v1/qr-ring-create`, {
-          method:'POST', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ qr_token: qr, visitor_alias: alias || null })
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Ring failed');
-        statusEl.className='ok'; statusEl.textContent='Ring olustu. Chate yonlendiriliyor...';
-        location.href = `./chat.html?ring_id=${encodeURIComponent(data.ring_id)}&visitor_session_token=${encodeURIComponent(data.visitor_session_token)}`;
-      } catch (e) {
-        statusEl.className='err'; statusEl.textContent = e.message || String(e);
-      }
-    };
-  </script>
+    <section id="consentView" class="card view">
+      <span class="eyebrow">Güvenlik bilgilendirmesi</span>
+      <h1>Zili çalmadan önce</h1>
+      <p class="lead">Kötüye kullanımı önlemek ve görüşmeyi kurmak için aşağıdaki veriler işlenir.</p>
+      <ul class="privacy-list">
+        <li><span>01</span><div><strong>Cihaz ve tarayıcı bilgileri</strong><small>Platform, dil, saat dilimi, ekran ölçüsü, dokunma ve donanım kapasitesi.</small></div></li>
+        <li><span>02</span><div><strong>Güvenlik tanımlayıcıları</strong><small>Yerel rastgele cihaz anahtarı ile ağ adresinin sunucuda tuzlu, tek yönlü özetleri. Ham IP saklanmaz.</small></div></li>
+        <li><span>03</span><div><strong>Görüşme kayıtları</strong><small>Zil, mesaj ve güvenlik olayları. Free hostta son 3 ziyaret; Pro hostta en fazla 90 gün.</small></div></li>
+      </ul>
+      <div class="notice"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v5c0 5.2-3.4 8.4-8 10-4.6-1.6-8-4.8-8-10V6l8-3z"/></svg><span>Ses ve görüntü WebRTC ile canlı aktarılır; DOQR tarafından kaydedilmez. Cihaz bilgileri kargo firması veya gerçek kimlik doğrulaması için kullanılmaz.</span></div>
+      <label class="check-row"><input id="consentCheck" type="checkbox"><span>Bilgilendirmeyi okudum ve güvenlik amacıyla veri işlenmesini kabul ediyorum.</span></label>
+      <div id="turnstile"></div>
+      <button id="continueBtn" class="button primary" type="button" disabled>Devam et <span>→</span></button>
+      <p class="micro">Devam ederek yalnızca bu ziyaret için geçici bir anonim oturum oluşturursunuz.</p>
+    </section>
+
+    <section id="setupView" class="card view">
+      <div class="door-heading">
+        <div class="door-symbol"><span></span></div>
+        <div><span class="eyebrow">Dijital zil</span><h1 id="doorLabel">Kapı</h1></div>
+      </div>
+      <p id="welcomeMessage" class="lead"></p>
+
+      <div class="field-group">
+        <label for="visitorAlias">Adınız <em id="nameOptional">(opsiyonel)</em></label>
+        <input id="visitorAlias" maxlength="80" autocomplete="name" placeholder="Nasıl hitap edelim?">
+      </div>
+
+      <div class="field-group">
+        <label>Ziyaret türü</label>
+        <div class="segmented" id="visitorKinds">
+          <button type="button" data-kind="guest" class="selected">Ziyaretçi</button>
+          <button type="button" data-kind="courier">Kuryeyim</button>
+          <button type="button" data-kind="other">Diğer</button>
+        </div>
+      </div>
+
+      <div id="courierFields" class="field-group hidden">
+        <label for="courierSelect">Kurye şirketi</label>
+        <select id="courierSelect"><option value="">Şirket seçin</option></select>
+        <p class="field-note">Bu seçim kendi beyanınızdır. Hazır teslimat notu veya kodu yalnızca host onaylarsa paylaşılır.</p>
+      </div>
+
+      <div class="field-group">
+        <label>Nasıl görüşmek istersiniz?</label>
+        <div id="modeGrid" class="mode-grid"></div>
+        <p id="mediaAvailabilityNote" class="field-note hidden"></p>
+      </div>
+      <button id="ringBtn" class="button primary" type="button">Zili çal <span>→</span></button>
+    </section>
+
+    <section id="sessionView" class="view session-view">
+      <div class="card session-status">
+        <div id="pulse" class="ring-pulse"><span></span></div>
+        <div><span id="sessionEyebrow" class="eyebrow">Zil çalıyor</span><h1 id="sessionTitle">Host bekleniyor</h1><p id="sessionSubtitle">Lütfen bu sayfayı açık tutun.</p></div>
+        <button id="cancelBtn" type="button" class="icon-button" aria-label="İptal">×</button>
+      </div>
+
+      <div id="mediaCard" class="card media-card hidden">
+        <video id="remoteVideo" autoplay playsinline></video>
+        <video id="localVideo" autoplay muted playsinline></video>
+        <span id="mediaLimitLabel" class="media-limit hidden"></span>
+        <div id="audioState" class="audio-state hidden"><div class="audio-bars"><i></i><i></i><i></i><i></i><i></i></div><strong>Sesli görüşme</strong><span id="connectionLabel">Bağlanıyor…</span></div>
+        <div class="media-controls"><button id="muteBtn" type="button" title="Mikrofon">🎙</button><button id="cameraBtn" type="button" title="Kamera">▣</button><button id="hangupBtn" class="hangup" type="button" title="Görüşmeyi bitir">⌕</button></div>
+      </div>
+
+      <div class="card chat-card">
+        <div class="chat-head"><div><span class="eyebrow">Canlı görüşme</span><strong>Mesajlar</strong></div><span id="onlineDot" class="online-dot"></span></div>
+        <div id="messages" class="messages" aria-live="polite"><p class="empty-chat">Henüz mesaj yok.</p></div>
+        <form id="messageForm" class="composer"><input id="messageInput" maxlength="2000" autocomplete="off" placeholder="Mesaj yazın…"><button type="submit" aria-label="Gönder">↑</button></form>
+      </div>
+    </section>
+  </main>
+  <footer>DOQR • Donanımsız, hızlı ve güvenli dijital zil</footer>
+  <script type="module" src="./app.js?v=20260810"></script>
 </body>
 </html>

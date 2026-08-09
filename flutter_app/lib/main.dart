@@ -7,51 +7,54 @@ import 'screens/auth_screen.dart';
 import 'screens/chat_screen.dart';
 import 'screens/doors_manage_screen.dart';
 import 'screens/home_screen.dart';
-import 'screens/qr_ring_screen.dart';
-import 'screens/qr_token_manage_screen.dart';
-import 'screens/share_accept_screen.dart';
-import 'screens/share_create_screen.dart';
-import 'screens/visitor_chat_screen.dart';
+import 'services/notification_service.dart';
 import 'ui/app_theme.dart';
+
+final navigatorKey = GlobalKey<NavigatorState>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   AppConfig.validate();
-  await Supabase.initialize(url: AppConfig.supabaseUrl, anonKey: AppConfig.supabaseAnonKey);
+  await Supabase.initialize(
+      url: AppConfig.supabaseUrl, publishableKey: AppConfig.supabaseKey);
+  await NotificationService.instance.initialize();
   runApp(const ProviderScope(child: DoqrApp()));
 }
 
-class DoqrApp extends StatelessWidget {
+class DoqrApp extends StatefulWidget {
   const DoqrApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'DOQR',
-      debugShowCheckedModeBanner: false,
-      theme: buildDoqrTheme(),
-      routes: {
-        '/': (_) => const AuthGate(),
-        '/home': (_) => const HomeScreen(),
-        '/doors-manage': (_) => const DoorsManageScreen(),
-        '/qr-ring': (_) => const QrRingScreen(),
-        '/share-accept': (_) => const ShareAcceptScreen(),
-        '/share-create': (_) => const ShareCreateScreen(),
-        '/qr-token-manage': (_) => const QrTokenManageScreen(),
-      },
-      onGenerateRoute: (settings) {
-        if (settings.name == '/chat') {
-          final ringId = settings.arguments as String;
-          return MaterialPageRoute(builder: (_) => ChatScreen(ringId: ringId));
-        }
-        if (settings.name == '/visitor-chat') {
-          final args = settings.arguments as Map<String, dynamic>;
-          return MaterialPageRoute(builder: (_) => VisitorChatScreen(ringId: args['ring_id'] as String, visitorSessionToken: args['visitor_session_token'] as String));
-        }
-        return null;
-      },
-    );
+  State<DoqrApp> createState() => _DoqrAppState();
+}
+
+class _DoqrAppState extends State<DoqrApp> {
+  @override
+  void initState() {
+    super.initState();
+    NotificationService.instance.attachNavigator(navigatorKey);
   }
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+        navigatorKey: navigatorKey,
+        title: 'DOQR',
+        debugShowCheckedModeBanner: false,
+        theme: buildDoqrTheme(),
+        routes: {
+          '/': (_) => const AuthGate(),
+          '/home': (_) => const HomeScreen(),
+          '/doors': (_) => const DoorsManageScreen(),
+        },
+        onGenerateRoute: (settings) {
+          if (settings.name == '/ring') {
+            return MaterialPageRoute(
+                builder: (_) =>
+                    RingSessionScreen(ringId: settings.arguments as String));
+          }
+          return null;
+        },
+      );
 }
 
 class AuthGate extends StatelessWidget {
@@ -59,8 +62,9 @@ class AuthGate extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final session = Supabase.instance.client.auth.currentSession;
-    if (session == null) return const AuthScreen();
+    if (Supabase.instance.client.auth.currentSession == null) {
+      return const AuthScreen();
+    }
     return const HomeScreen();
   }
 }

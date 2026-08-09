@@ -1,0 +1,7 @@
+# Local secrets and deployment credentials
+.env
+.env.*
+!.env.example
+*firebase-service-account*.json
+*service-account*.json
+supabase/.temp/

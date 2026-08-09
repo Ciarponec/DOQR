@@ -8,7 +8,11 @@ class DoorQrScreen extends StatelessWidget {
   final String qrUrl;
   final String tokenId;
 
-  const DoorQrScreen({super.key, required this.doorLabel, required this.qrUrl, required this.tokenId});
+  const DoorQrScreen(
+      {super.key,
+      required this.doorLabel,
+      required this.qrUrl,
+      required this.tokenId});
 
   @override
   Widget build(BuildContext context) {
@@ -21,10 +25,12 @@ class DoorQrScreen extends StatelessWidget {
               children: [
                 QrImageView(data: qrUrl, version: QrVersions.auto, size: 250),
                 const SizedBox(height: 14),
-                const Align(alignment: Alignment.centerLeft, child: Text('QR Linki')),
+                const Align(
+                    alignment: Alignment.centerLeft, child: Text('QR Linki')),
                 SelectableText(qrUrl),
                 const SizedBox(height: 8),
-                const Align(alignment: Alignment.centerLeft, child: Text('Token ID')),
+                const Align(
+                    alignment: Alignment.centerLeft, child: Text('Token ID')),
                 SelectableText(tokenId),
               ],
             ),

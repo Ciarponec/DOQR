@@ -1,31 +1,78 @@
-import { json, requireUser, serviceClient } from "../_shared/utils.ts";
+import {
+  cleanText,
+  errorResponse,
+  HttpError,
+  json,
+  options,
+  randomSecret,
+  readJson,
+  requirePermanentUser,
+  serviceClient,
+  sha256Hex,
+} from "../_shared/utils.ts";
 
 Deno.serve(async (req) => {
+  const preflight = options(req);
+  if (preflight) return preflight;
   try {
-    if (req.method !== "POST") return json(405, { error: "Method not allowed" });
-    const user = await requireUser(req.headers.get("Authorization") ?? undefined);
-    const { door_id, expires_minutes = 43200 } = await req.json();
-    if (!door_id) return json(400, { error: "door_id required" });
+    if (req.method !== "POST") {
+      return json(405, { error: "Method not allowed" }, req);
+    }
+    const user = await requirePermanentUser(
+      req.headers.get("Authorization") ?? undefined,
+    );
+    const body = await readJson<Record<string, unknown>>(req);
+    const doorId = cleanText(body.door_id, 36, true)!;
+    const expiresMinutes = body.expires_minutes == null
+      ? null
+      : Number(body.expires_minutes);
+    if (
+      expiresMinutes != null &&
+      (!Number.isInteger(expiresMinutes) ||
+        expiresMinutes < 10 ||
+        expiresMinutes > 2_628_000)
+    ) {
+      throw new HttpError(
+        400,
+        "QR süresi 10 dakika ile 5 yıl arasında olmalı",
+        "VALIDATION_ERROR",
+      );
+    }
 
     const admin = serviceClient();
-    const { data: door, error: dErr } = await admin.from("doors").select("id, owner_user_id").eq("id", door_id).single();
-    if (dErr || !door) return json(404, { error: "Door not found" });
-    if (door.owner_user_id !== user.id) return json(403, { error: "Only owner can generate QR tokens" });
+    const { data: door, error: doorError } = await admin.from("doors")
+      .select("id, owner_user_id")
+      .eq("id", doorId)
+      .maybeSingle();
+    if (doorError) throw new Error(doorError.message);
+    if (!door) {
+      throw new HttpError(404, "Dijital zil bulunamadı", "DOOR_NOT_FOUND");
+    }
+    if (door.owner_user_id !== user.id) {
+      throw new HttpError(
+        403,
+        "Yalnızca dijital zil sahibi QR kodu üretebilir",
+        "FORBIDDEN",
+      );
+    }
 
-    const { randomSecret, sha256Hex } = await import("../_shared/utils.ts");
-    const raw = randomSecret(24);
-    const hash = await sha256Hex(raw);
-    const exp = new Date(Date.now() + Number(expires_minutes) * 60_000).toISOString();
+    const raw = randomSecret(32);
+    const expiresAt = expiresMinutes == null
+      ? null
+      : new Date(Date.now() + expiresMinutes * 60_000).toISOString();
+    const { data, error } = await admin.from("door_public_tokens").insert({
+      door_id: doorId,
+      token_hash: await sha256Hex(raw),
+      expires_at: expiresAt,
+    }).select("id, expires_at").single();
+    if (error) throw new Error(error.message);
 
-    const { data, error } = await admin
-      .from("door_public_tokens")
-      .insert({ door_id, token_hash: hash, expires_at: exp })
-      .select("id, expires_at")
-      .single();
-    if (error) return json(500, { error: error.message });
-
-    return json(200, { qr_token: raw, token_id: data.id, expires_at: data.expires_at });
-  } catch (e) {
-    return json(401, { error: e.message ?? "Unauthorized" });
+    return json(201, {
+      qr_token: raw,
+      token_id: data.id,
+      expires_at: data.expires_at,
+    }, req);
+  } catch (error) {
+    return errorResponse(error, req);
   }
 });

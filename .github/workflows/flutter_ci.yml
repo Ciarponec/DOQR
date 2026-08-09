@@ -16,7 +16,16 @@ jobs:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.24.0'
+          flutter-version: '3.44.4'
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Check Edge Functions
+        working-directory: .
+        run: deno check supabase/functions/*/index.ts
+      - name: Check visitor web JavaScript
+        working-directory: .
+        run: node --check visitor_web/app.js

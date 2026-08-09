@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "955464719308",
+    "project_id": "doqr-90bd6",
+    "storage_bucket": "doqr-90bd6.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:955464719308:android:e9b1d0d192f7a9cf3bdb69",
+        "android_client_info": {
+          "package_name": "com.doqr.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA_EoIDKClKiugTn7bNm2_XwojiGlqogxE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:955464719308:android:e52f36c5516d66593bdb69",
+        "android_client_info": {
+          "package_name": "com.mycompany.doqr"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA_EoIDKClKiugTn7bNm2_XwojiGlqogxE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

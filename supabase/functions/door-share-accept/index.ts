@@ -1,51 +1,67 @@
-import { json, requireUser, serviceClient } from "../_shared/utils.ts";
+import {
+  cleanText,
+  errorResponse,
+  HttpError,
+  json,
+  options,
+  readJson,
+  requirePermanentUser,
+  serviceClient,
+  sha256Hex,
+} from "../_shared/utils.ts";
+
+function shareError(message: string): HttpError | null {
+  if (message.includes("SHARE_TOKEN_INVALID")) {
+    return new HttpError(404, "Davet geçersiz", "SHARE_TOKEN_INVALID");
+  }
+  if (message.includes("SHARE_TOKEN_REVOKED")) {
+    return new HttpError(410, "Davet iptal edilmiş", "SHARE_TOKEN_REVOKED");
+  }
+  if (message.includes("SHARE_TOKEN_EXPIRED")) {
+    return new HttpError(410, "Davetin süresi dolmuş", "SHARE_TOKEN_EXPIRED");
+  }
+  if (message.includes("SHARE_TOKEN_USED")) {
+    return new HttpError(
+      409,
+      "Davet kullanım sınırına ulaşmış",
+      "SHARE_TOKEN_USED",
+    );
+  }
+  if (message.includes("SHARE_PIN_INVALID")) {
+    return new HttpError(403, "PIN yanlış", "SHARE_PIN_INVALID");
+  }
+  if (message.includes("HOST_PLAN_LIMIT")) {
+    return new HttpError(402, "Host plan sınırına ulaşıldı", "HOST_PLAN_LIMIT");
+  }
+  return null;
+}
 
 Deno.serve(async (req) => {
+  const preflight = options(req);
+  if (preflight) return preflight;
   try {
-    if (req.method !== "POST") return json(405, { error: "Method not allowed" });
-    const user = await requireUser(req.headers.get("Authorization") ?? undefined);
-    const { share_token, pin } = await req.json();
-    if (!share_token) return json(400, { error: "share_token required" });
-
-    const admin = serviceClient();
-    const { sha256Hex } = await import("../_shared/utils.ts");
-    const tokenHash = await sha256Hex(share_token);
-    const { data: tokenRow, error: tokenErr } = await admin
-      .from("door_share_tokens")
-      .select("id, door_id, pin_hash, expires_at, revoked_at, used_count, max_uses, created_by")
-      .eq("token_hash", tokenHash)
-      .maybeSingle();
-
-    if (tokenErr) return json(500, { error: tokenErr.message });
-    if (!tokenRow) return json(404, { error: "Token invalid" });
-    if (tokenRow.revoked_at) return json(410, { error: "Token revoked" });
-    if (new Date(tokenRow.expires_at).getTime() < Date.now()) return json(410, { error: "Token expired" });
-    if (tokenRow.used_count >= tokenRow.max_uses) return json(409, { error: "Token usage exceeded" });
-
-    if (tokenRow.pin_hash) {
-      if (!pin) return json(400, { error: "PIN required" });
-      const inHash = await sha256Hex(String(pin));
-      if (inHash !== tokenRow.pin_hash) return json(403, { error: "PIN invalid" });
+    if (req.method !== "POST") {
+      return json(405, { error: "Method not allowed" }, req);
     }
-
-    const { error: upsertErr } = await admin
-      .from("door_shared_users")
-      .upsert({
-        door_id: tokenRow.door_id,
-        user_id: user.id,
-        permission: "notify_chat",
-        granted_by: tokenRow.created_by,
-      }, { onConflict: "door_id,user_id" });
-    if (upsertErr) return json(500, { error: upsertErr.message });
-
-    const { error: usageErr } = await admin
-      .from("door_share_tokens")
-      .update({ used_count: tokenRow.used_count + 1 })
-      .eq("id", tokenRow.id);
-    if (usageErr) return json(500, { error: usageErr.message });
-
-    return json(200, { door_id: tokenRow.door_id, accepted: true });
-  } catch (e) {
-    return json(401, { error: e.message ?? "Unauthorized" });
+    const user = await requirePermanentUser(
+      req.headers.get("Authorization") ?? undefined,
+    );
+    const body = await readJson<Record<string, unknown>>(req);
+    const token = cleanText(body.share_token, 256, true)!;
+    const pin = cleanText(body.pin, 12);
+    const admin = serviceClient();
+    const { error: profileError } = await admin.from("users").upsert({
+      id: user.id,
+    }, { onConflict: "id" });
+    if (profileError) throw new Error(profileError.message);
+    const { data, error } = await admin.rpc("accept_door_share", {
+      _user_id: user.id,
+      _token_hash: await sha256Hex(token),
+      _pin_hash: pin ? await sha256Hex(pin) : null,
+    });
+    if (error) throw shareError(error.message) ?? new Error(error.message);
+    return json(200, data, req);
+  } catch (error) {
+    return errorResponse(error, req);
   }
 });

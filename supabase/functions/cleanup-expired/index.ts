@@ -1,34 +1,38 @@
-import { json, serviceClient } from "../_shared/utils.ts";
+import {
+  errorResponse,
+  getEnv,
+  HttpError,
+  json,
+  options,
+  serviceClient,
+} from "../_shared/utils.ts";
+
+function timingSafeEqual(left: string, right: string): boolean {
+  const a = new TextEncoder().encode(left);
+  const b = new TextEncoder().encode(right);
+  if (a.length !== b.length) return false;
+  let difference = 0;
+  for (let index = 0; index < a.length; index++) {
+    difference |= a[index] ^ b[index];
+  }
+  return difference === 0;
+}
 
 Deno.serve(async (req) => {
-  if (req.method !== "POST") return json(405, { error: "Method not allowed" });
+  const preflight = options(req);
+  if (preflight) return preflight;
   try {
-    const admin = serviceClient();
-    const nowIso = new Date().toISOString();
-
-    const { error: qrErr } = await admin
-      .from("door_public_tokens")
-      .update({ revoked_at: nowIso })
-      .is("revoked_at", null)
-      .lt("expires_at", nowIso);
-    if (qrErr) return json(500, { error: qrErr.message });
-
-    const { error: shareErr } = await admin
-      .from("door_share_tokens")
-      .update({ revoked_at: nowIso })
-      .is("revoked_at", null)
-      .lt("expires_at", nowIso);
-    if (shareErr) return json(500, { error: shareErr.message });
-
-    const { error: ringErr } = await admin
-      .from("rings")
-      .update({ status: "missed", closed_at: nowIso })
-      .eq("status", "pending")
-      .lt("created_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
-    if (ringErr) return json(500, { error: ringErr.message });
-
-    return json(200, { cleaned: true, at: nowIso });
-  } catch (e) {
-    return json(500, { error: e.message ?? "Unexpected error" });
+    if (req.method !== "POST") {
+      return json(405, { error: "Method not allowed" }, req);
+    }
+    const supplied = req.headers.get("x-cron-secret") ?? "";
+    if (!timingSafeEqual(supplied, getEnv("CLEANUP_CRON_SECRET"))) {
+      throw new HttpError(401, "Unauthorized", "AUTH_INVALID");
+    }
+    const { data, error } = await serviceClient().rpc("purge_doorbell_data");
+    if (error) throw new Error(error.message);
+    return json(200, data, req);
+  } catch (error) {
+    return errorResponse(error, req);
   }
 });
