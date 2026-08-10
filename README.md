@@ -4,7 +4,7 @@ DOQR, fiziksel donanım gerektirmeyen dijital kapı zilidir. Host Flutter uygula
 
 ## Ürün modeli
 
-| Özellik | Free | İlk 3 gün Pro deneme | Pro — yıllık $9.99 |
+| Özellik | Free | İlk 3 gün Pro deneme | Pro — yıllık $14.99 |
 |---|---:|---:|---:|
 | FCM zil bildirimi | ✓ | ✓ | ✓ |
 | Yazılı görüşme | ✓ | ✓ | ✓ |

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../l10n/app_language.dart';
 import '../models/courier_note_item.dart';
 import '../models/door_item.dart';
 import '../services/providers.dart';
@@ -35,17 +36,21 @@ class _CourierNotesScreenState extends ConsumerState<CourierNotesScreen> {
         TextEditingController(text: note?.courierCode ?? 'hepsiburada');
     final label =
         TextEditingController(text: note?.courierLabel ?? 'Hepsiburada');
-    final title = TextEditingController(text: note?.title ?? 'Teslimat notu');
-    final message =
-        TextEditingController(text: note?.message ?? 'Lütfen kapıya bırakın.');
+    final title = TextEditingController(
+        text: note?.title ?? context.tr('Teslimat notu', 'Delivery note'));
+    final message = TextEditingController(
+        text: note?.message ??
+            context.tr(
+                'Lütfen kapıya bırakın.', 'Please leave it at the door.'));
     final delivery = TextEditingController(text: note?.deliveryCode ?? '');
     var active = note?.isActive ?? true;
     final save = await showDialog<bool>(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title:
-              Text(note == null ? 'Kurye notu ekle' : 'Kurye notunu düzenle'),
+          title: Text(note == null
+              ? context.tr('Kurye notu ekle', 'Add courier note')
+              : context.tr('Kurye notunu düzenle', 'Edit courier note')),
           content: SizedBox(
             width: 420,
             child: SingleChildScrollView(
@@ -54,36 +59,44 @@ class _CourierNotesScreenState extends ConsumerState<CourierNotesScreen> {
                 children: [
                   TextField(
                       controller: label,
-                      decoration:
-                          const InputDecoration(labelText: 'Kurye şirketi')),
+                      decoration: InputDecoration(
+                          labelText:
+                              context.tr('Kurye şirketi', 'Courier company'))),
                   const SizedBox(height: 10),
                   TextField(
                       controller: code,
-                      decoration: const InputDecoration(
-                          labelText: 'Eşleşme kodu (örn. hepsiburada)')),
+                      decoration: InputDecoration(
+                          labelText: context.tr(
+                              'Eşleşme kodu (örn. hepsiburada)',
+                              'Matching code (e.g. hepsiburada)'))),
                   const SizedBox(height: 10),
                   TextField(
                       controller: title,
-                      decoration: const InputDecoration(labelText: 'Başlık')),
+                      decoration: InputDecoration(
+                          labelText: context.tr('Başlık', 'Title'))),
                   const SizedBox(height: 10),
                   TextField(
                       controller: message,
                       maxLength: 500,
                       minLines: 2,
                       maxLines: 4,
-                      decoration: const InputDecoration(labelText: 'Mesaj')),
+                      decoration: InputDecoration(
+                          labelText: context.tr('Mesaj', 'Message'))),
                   const SizedBox(height: 10),
                   TextField(
                       controller: delivery,
-                      decoration: const InputDecoration(
-                          labelText: 'Teslimat kodu (opsiyonel)',
-                          helperText: 'Sunucuda şifrelenerek saklanır.')),
+                      decoration: InputDecoration(
+                          labelText: context.tr('Teslimat kodu (opsiyonel)',
+                              'Delivery code (optional)'),
+                          helperText: context.tr(
+                              'Sunucuda şifrelenerek saklanır.',
+                              'Stored encrypted on the server.'))),
                   SwitchListTile(
                       contentPadding: EdgeInsets.zero,
                       value: active,
                       onChanged: (value) =>
                           setDialogState(() => active = value),
-                      title: const Text('Aktif')),
+                      title: Text(context.tr('Aktif', 'Active'))),
                 ],
               ),
             ),
@@ -91,10 +104,10 @@ class _CourierNotesScreenState extends ConsumerState<CourierNotesScreen> {
           actions: [
             TextButton(
                 onPressed: () => Navigator.pop(context, false),
-                child: const Text('Vazgeç')),
+                child: Text(context.tr('Vazgeç', 'Cancel'))),
             FilledButton(
                 onPressed: () => Navigator.pop(context, true),
-                child: const Text('Kaydet')),
+                child: Text(context.tr('Kaydet', 'Save'))),
           ],
         ),
       ),
@@ -126,7 +139,7 @@ class _CourierNotesScreenState extends ConsumerState<CourierNotesScreen> {
 
   @override
   Widget build(BuildContext context) => AppShell(
-        title: 'Kurye notları',
+        title: context.tr('Kurye notları', 'Courier notes'),
         child: FutureBuilder<List<CourierNoteItem>>(
           future: _future,
           builder: (context, snapshot) {
@@ -141,7 +154,9 @@ class _CourierNotesScreenState extends ConsumerState<CourierNotesScreen> {
               children: [
                 ElevCard(
                   child: Text(
-                      'Yalnızca QR’ı tararken bu kurye şirketini seçen ziyaretçi ilgili notu ve teslimat kodunu görür.',
+                      context.tr(
+                          'Yalnızca QR’ı tararken bu kurye şirketini seçen ziyaretçi ilgili notu ve teslimat kodunu görür.',
+                          'Only visitors who select this courier company while scanning the QR code will see the related note and delivery code.'),
                       style: Theme.of(context).textTheme.bodyMedium),
                 ),
                 const SizedBox(height: 12),
@@ -150,11 +165,13 @@ class _CourierNotesScreenState extends ConsumerState<CourierNotesScreen> {
                     child: FilledButton.icon(
                         onPressed: _edit,
                         icon: const Icon(Icons.add),
-                        label: const Text('Not ekle'))),
+                        label: Text(context.tr('Not ekle', 'Add note')))),
                 const SizedBox(height: 12),
                 Expanded(
                   child: notes.isEmpty
-                      ? const Center(child: Text('Henüz kurye notu yok.'))
+                      ? Center(
+                          child: Text(context.tr('Henüz kurye notu yok.',
+                              'No courier notes yet.')))
                       : ListView.separated(
                           itemCount: notes.length,
                           separatorBuilder: (context, index) =>
@@ -171,7 +188,7 @@ class _CourierNotesScreenState extends ConsumerState<CourierNotesScreen> {
                                     style: const TextStyle(
                                         fontWeight: FontWeight.w700)),
                                 subtitle: Text(
-                                    '${note.message}${note.deliveryCode == null ? '' : '\nKod: ${note.deliveryCode}'}'),
+                                    '${note.message}${note.deliveryCode == null ? '' : context.tr('\nKod: ${note.deliveryCode}', '\nCode: ${note.deliveryCode}')}'),
                                 trailing: PopupMenuButton<String>(
                                   onSelected: (action) async {
                                     if (action == 'edit') return _edit(note);
@@ -181,11 +198,15 @@ class _CourierNotesScreenState extends ConsumerState<CourierNotesScreen> {
                                             widget.door.id, note.id);
                                     _reload();
                                   },
-                                  itemBuilder: (_) => const [
+                                  itemBuilder: (_) => [
                                     PopupMenuItem(
-                                        value: 'edit', child: Text('Düzenle')),
+                                        value: 'edit',
+                                        child: Text(
+                                            context.tr('Düzenle', 'Edit'))),
                                     PopupMenuItem(
-                                        value: 'delete', child: Text('Sil')),
+                                        value: 'delete',
+                                        child:
+                                            Text(context.tr('Sil', 'Delete'))),
                                   ],
                                 ),
                               ),

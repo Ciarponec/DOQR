@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../l10n/app_language.dart';
 import '../ui/app_theme.dart';
 import '../widgets/app_shell.dart';
 
@@ -30,10 +31,12 @@ class _AuthScreenState extends State<AuthScreen> {
     final mail = email.text.trim();
     final secret = password.text;
     if (mail.isEmpty || secret.isEmpty) {
-      return setState(() => error = 'E-posta ve şifre gerekli.');
+      return setState(() => error = context.tr(
+          'E-posta ve şifre gerekli.', 'Email and password are required.'));
     }
     if (create && secret.length < 8) {
-      return setState(() => error = 'Şifre en az 8 karakter olmalı.');
+      return setState(() => error = context.tr('Şifre en az 8 karakter olmalı.',
+          'Password must be at least 8 characters.'));
     }
     setState(() {
       loading = true;
@@ -46,8 +49,9 @@ class _AuthScreenState extends State<AuthScreen> {
             .signUp(email: mail, password: secret);
         if (result.session == null) {
           if (mounted) {
-            setState(() => info =
-                'Hesap oluşturuldu. E-postandaki doğrulama bağlantısını aç.');
+            setState(() => info = context.tr(
+                'Hesap oluşturuldu. E-postandaki doğrulama bağlantısını aç.',
+                'Account created. Open the verification link in your email.'));
           }
           return;
         }
@@ -62,8 +66,9 @@ class _AuthScreenState extends State<AuthScreen> {
       if (mounted) setState(() => error = exception.message);
     } catch (_) {
       if (mounted) {
-        setState(
-            () => error = 'Şu anda giriş yapılamıyor. Lütfen tekrar dene.');
+        setState(() => error = context.tr(
+            'Şu anda giriş yapılamıyor. Lütfen tekrar dene.',
+            'Unable to sign in right now. Please try again.'));
       }
     } finally {
       if (mounted) setState(() => loading = false);
@@ -87,17 +92,22 @@ class _AuthScreenState extends State<AuthScreen> {
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(22, 34, 22, 24),
                   children: [
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(24),
-                        child: Image.asset('assets/doqr_icon.png',
-                            width: 82, height: 82, fit: BoxFit.cover),
-                      ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(24),
+                          child: Image.asset('assets/doqr_icon.png',
+                              width: 82, height: 82, fit: BoxFit.cover),
+                        ),
+                        const LanguagePickerButton(
+                            foregroundColor: Colors.white),
+                      ],
                     ),
                     const SizedBox(height: 28),
                     Text(
-                      'Kapınız, tek taramayla ulaşılabilir.',
+                      context.tr('Kapınız, tek taramayla ulaşılabilir.',
+                          'Your door is one scan away.'),
                       style: Theme.of(context)
                           .textTheme
                           .displaySmall
@@ -105,7 +115,9 @@ class _AuthScreenState extends State<AuthScreen> {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      'Ziyaretçiler uygulama kurmadan QR’ı tarar. Siz anında haberdar olur, güvenle yanıt verirsiniz.',
+                      context.tr(
+                          'Ziyaretçiler uygulama kurmadan QR’ı tarar. Siz anında haberdar olur, güvenle yanıt verirsiniz.',
+                          'Visitors scan the QR code without installing an app. You are notified instantly and respond securely.'),
                       style: Theme.of(context)
                           .textTheme
                           .bodyLarge
@@ -117,10 +129,13 @@ class _AuthScreenState extends State<AuthScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Text('Host hesabı',
+                          Text(context.tr('Host hesabı', 'Host account'),
                               style: Theme.of(context).textTheme.headlineSmall),
                           const SizedBox(height: 5),
-                          Text('Dijital zilini yönetmek için devam et.',
+                          Text(
+                              context.tr(
+                                  'Dijital zilini yönetmek için devam et.',
+                                  'Continue to manage your digital doorbell.'),
                               style: Theme.of(context)
                                   .textTheme
                                   .bodyMedium
@@ -130,10 +145,10 @@ class _AuthScreenState extends State<AuthScreen> {
                             controller: email,
                             keyboardType: TextInputType.emailAddress,
                             autofillHints: const [AutofillHints.email],
-                            decoration: const InputDecoration(
-                                labelText: 'E-posta',
+                            decoration: InputDecoration(
+                                labelText: context.tr('E-posta', 'Email'),
                                 prefixIcon:
-                                    Icon(Icons.alternate_email_rounded)),
+                                    const Icon(Icons.alternate_email_rounded)),
                           ),
                           const SizedBox(height: 12),
                           TextField(
@@ -143,7 +158,7 @@ class _AuthScreenState extends State<AuthScreen> {
                             onSubmitted: (_) =>
                                 loading ? null : _submit(create: false),
                             decoration: InputDecoration(
-                              labelText: 'Şifre',
+                              labelText: context.tr('Şifre', 'Password'),
                               prefixIcon:
                                   const Icon(Icons.lock_outline_rounded),
                               suffixIcon: IconButton(
@@ -169,13 +184,14 @@ class _AuthScreenState extends State<AuthScreen> {
                                     height: 22,
                                     child: CircularProgressIndicator(
                                         strokeWidth: 2.5, color: Colors.white))
-                                : const Text('Giriş yap'),
+                                : Text(context.tr('Giriş yap', 'Sign in')),
                           ),
                           const SizedBox(height: 10),
                           OutlinedButton(
                               onPressed:
                                   loading ? null : () => _submit(create: true),
-                              child: const Text('Ücretsiz hesap oluştur')),
+                              child: Text(context.tr('Ücretsiz hesap oluştur',
+                                  'Create a free account'))),
                         ],
                       ),
                     ),
@@ -186,7 +202,9 @@ class _AuthScreenState extends State<AuthScreen> {
                         const Icon(Icons.shield_outlined,
                             size: 17, color: Color(0xFF9FB0E6)),
                         const SizedBox(width: 7),
-                        Text('Güvenlik odaklı dijital zil',
+                        Text(
+                            context.tr('Güvenlik odaklı dijital zil',
+                                'Security-first digital doorbell'),
                             style: Theme.of(context)
                                 .textTheme
                                 .bodySmall

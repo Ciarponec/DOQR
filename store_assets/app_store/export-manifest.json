@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "generator": "scripts/generate_app_store_assets.py",
+  "sources": [
+    "store_assets/google_play/phone-01-host-login.png",
+    "store_assets/google_play/phone-02-home.png",
+    "store_assets/google_play/phone-03-plans.png",
+    "store_assets/google_play/tablet-10-01-login.png",
+    "flutter_app/ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-1024x1024@1x.png"
+  ],
+  "exports": [
+    {
+      "file": "store_assets/app_store/iphone-6.9-01-host-login.png",
+      "width": 1290,
+      "height": 2796,
+      "mode": "RGB",
+      "sha256": "b44803937155c60448f9981c99e2179c85c832f9e3b93656c680ab5f24bcc5dd"
+    },
+    {
+      "file": "store_assets/app_store/iphone-6.9-02-home.png",
+      "width": 1290,
+      "height": 2796,
+      "mode": "RGB",
+      "sha256": "62c4b71d774459a761b954e1bb106c412803c3b95c2923ab2f94777ce7ad4937"
+    },
+    {
+      "file": "store_assets/app_store/iphone-6.9-03-plans.png",
+      "width": 1290,
+      "height": 2796,
+      "mode": "RGB",
+      "sha256": "fc0f8d90d845ea9346e14b29a756dde9142f6d6ed8cca6bad5ee4f4613047a2a"
+    },
+    {
+      "file": "store_assets/app_store/iphone-6.5-01-host-login.png",
+      "width": 1284,
+      "height": 2778,
+      "mode": "RGB",
+      "sha256": "b4b68ca43c91d248f1b737a5b7d7a7f1d0ab2e752751bb3b4430cc46e98bf796"
+    },
+    {
+      "file": "store_assets/app_store/iphone-6.5-02-home.png",
+      "width": 1284,
+      "height": 2778,
+      "mode": "RGB",
+      "sha256": "ffaace7a2e35445a744ecf3a7332cb38d40d2e03a40d59ae240a38d74e7856ad"
+    },
+    {
+      "file": "store_assets/app_store/iphone-6.5-03-plans.png",
+      "width": 1284,
+      "height": 2778,
+      "mode": "RGB",
+      "sha256": "5545a4b2eb724127761ee77e403ad05d0c449a87617ba4afa007e236d9ad1ddb"
+    },
+    {
+      "file": "store_assets/app_store/ipad-13-01-host-login.png",
+      "width": 2732,
+      "height": 2048,
+      "mode": "RGB",
+      "sha256": "071a8ba7c6a669914e5e5af4749ccec7c03c8f2adb576026ae39854bb4e434a9"
+    },
+    {
+      "file": "store_assets/app_store/doqr-app-icon-1024.png",
+      "width": 1024,
+      "height": 1024,
+      "mode": "RGB",
+      "sha256": "0bae8ec53941db7d11fe4b0acd4ab220c8bcdd6f40dd9fceb0e35340314e8570"
+    },
+    {
+      "file": "flutter_app/ios/Runner/Assets.xcassets/LaunchImage.imageset/LaunchImage.png",
+      "width": 168,
+      "height": 168,
+      "mode": "RGB",
+      "sha256": "7a9ac8b9b6775d470f498959a8a9ddb1228a8071069d144719f49e0910e988f8"
+    },
+    {
+      "file": "flutter_app/ios/Runner/Assets.xcassets/LaunchImage.imageset/LaunchImage@2x.png",
+      "width": 336,
+      "height": 336,
+      "mode": "RGB",
+      "sha256": "058d786fc95336d2302a0d131c5b54c238a6de01d2fc1ea7fc4fcda1e07da296"
+    },
+    {
+      "file": "flutter_app/ios/Runner/Assets.xcassets/LaunchImage.imageset/LaunchImage@3x.png",
+      "width": 504,
+      "height": 504,
+      "mode": "RGB",
+      "sha256": "fc40dd447783ffe98faca95ba67d37d853d074d6828801b46e87d349f6473dfb"
+    }
+  ]
+}

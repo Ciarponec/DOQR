@@ -23,6 +23,7 @@ Docker Desktop, `supabase start` ve migration entegrasyon testi için çalışı
 supabase secrets set --project-ref <project-ref> `
   SUPABASE_PUBLISHABLE_KEY=<publishable-key> `
   FIREBASE_SERVICE_ACCOUNT_JSON='<firebase-service-account-json>' `
+  APPLE_APP_ID=<app-store-connect-numeric-apple-id> `
   VISITOR_IP_HASH_SALT=<random-secret> `
   VISITOR_DEVICE_HASH_SALT=<different-random-secret> `
   VISITOR_CONSENT_VERSION=2026-08-01 `
@@ -44,6 +45,8 @@ TURN kullanımı yalnızca bir medya oturumu başlatılırken Cloudflare Analyti
 
 `SUPABASE_URL` ile service-role/secret key barındırılan Edge Runtime tarafından sağlanır. Eski projelerde gerekirse `SUPABASE_ANON_KEY` ve `SUPABASE_SERVICE_ROLE_KEY` kullanılabilir. Turnstile açılacaksa Supabase Auth CAPTCHA ayarı ile `TURNSTILE_SITE_KEY` birlikte yapılandırılmalıdır.
 
+`APPLE_APP_ID`, App Store Connect'te uygulama oluşturulduğunda atanan sayısal Apple ID'dir. StoreKit 2 işlemleri ve App Store Server Notifications V2 payload'ları Apple'ın sertifika zinciriyle doğrulanır; App Store Connect API özel anahtarı istemciye veya repoya eklenmez.
+
 ## 3. Backend deploy
 
 ```powershell
@@ -51,6 +54,14 @@ supabase link --project-ref <project-ref>
 supabase db push --linked
 supabase functions deploy --project-ref <project-ref>
 ```
+
+App Store Connect → App Information → App Store Server Notifications alanında Production ve Sandbox URL'lerini aşağıdaki V2 endpoint'ine ayarlayın:
+
+```text
+https://<project-ref>.supabase.co/functions/v1/apple-store-notifications
+```
+
+Endpoint JWT istemez; bunun yerine Apple'ın `signedPayload` JWS imzasını, `com.doqr.app` bundle ID'sini ve `APPLE_APP_ID` değerini doğrular. App Store Connect'ten bir test bildirimi gönderip HTTP 200 alındığını Edge Function loglarında kontrol edin.
 
 `20260809231851_low_io_media_guard.sql` migration'ı eski dakika cron'unu, Vault sırrını, `pg_cron` ve `pg_net` uzantılarını kaldırır. Rate-limit durumu her kapsam için tek satırdır; zaman pencereleri yeni satır üretmez. Periyodik temizlik görevi kurulmaz. İşlemden sonra Supabase Database Advisors güvenlik ve performans uyarıları kontrol edilmelidir.
 
@@ -77,6 +88,10 @@ Supabase değerleri DOQR projesi için varsayılan olarak gömülüdür; bu komu
 
 Firebase istemci yapılandırması `android/app/google-services.json` ile `ios/Runner/GoogleService-Info.plist` dosyalarından okunur; Firebase için `--dart-define` kullanılmaz. Android application ID ve iOS bundle ID `com.doqr.app` değerindedir. iOS için APNs `.p8` anahtarı Firebase Cloud Messaging ekranına yüklenmeli; Apple Developer hesabında bu App ID için Push Notifications yetkisi açık olmalıdır. Backend bildirimi için Firebase **Service accounts > Generate new private key** ile alınan ayrı service-account JSON'u `FIREBASE_SERVICE_ACCOUNT_JSON` sırrına koyun. Bu özel anahtar hiçbir zaman repoya veya istemci uygulamasına eklenmez. Android release imzası yayın öncesi tamamlanmalıdır.
 
+Uygulama içinden Türkçe ve İngilizce seçilebilir; tercih cihazda saklanır. iOS paketi `en` ve `tr` yerelleştirmelerini ilan eder ve kamera/mikrofon izin açıklamalarını sistem diline göre gösterir.
+
+iOS release arşivi macOS üzerinde Xcode 26 veya daha yenisi ve iOS 26 SDK ile alınmalıdır. `flutter pub get` sonrasında `ios/` içinde `pod install --repo-update` çalıştırın ve `Runner.xcworkspace` dosyasını açın. Team/Automatic Signing seçimi geliştirici hesabına bağlı olduğundan Xcode'da tamamlanmalıdır. App Store metadata, privacy cevapları, inceleme şablonu ve görseller `store_assets/app_store/` klasöründedir.
+
 ## 6. Canlı kabul testi
 
 1. Host kayıt olur, dijital zil ve kalıcı QR üretir.
@@ -90,3 +105,5 @@ Firebase istemci yapılandırması `android/app/google-services.json` ile `ios/R
 9. Kurye şirketi seçiminin “doğrulanmamış beyan” olduğu ve kodun host onayından önce görünmediği doğrulanır.
 10. Aynı ziyaretçi cihaz engelinden sonra yeni zil başlatamaz; ağ engeli 24 saat sonra kalkar.
 11. İptal edilmiş QR, başka ring/chat verisi ve başka kapının özel Realtime kanalına erişemez.
+12. Sandbox `doqr_pro_annual` satın alımı Apple imzasıyla doğrulanır ve aynı Apple hesabında “Satın almayı geri yükle” çalışır.
+13. App Store Server Notifications test, yenileme, iptal ve süre sonu olayları `user_subscriptions.current_period_end` değerini doğru günceller.

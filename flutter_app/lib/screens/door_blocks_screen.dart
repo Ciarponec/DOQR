@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../l10n/app_language.dart';
 import '../models/door_item.dart';
 import '../services/providers.dart';
 import '../ui/app_theme.dart';
@@ -31,16 +32,17 @@ class _DoorBlocksScreenState extends ConsumerState<DoorBlocksScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Engel kaldırılsın mı?'),
-        content:
-            const Text('Bu cihaz veya ağ yeniden dijital zili çalabilecek.'),
+        title: Text(context.tr('Engel kaldırılsın mı?', 'Remove this block?')),
+        content: Text(context.tr(
+            'Bu cihaz veya ağ yeniden dijital zili çalabilecek.',
+            'This device or network will be able to ring the digital doorbell again.')),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('Vazgeç')),
+              child: Text(context.tr('Vazgeç', 'Cancel'))),
           FilledButton(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('Engeli kaldır')),
+              child: Text(context.tr('Engeli kaldır', 'Remove block'))),
         ],
       ),
     );
@@ -60,7 +62,7 @@ class _DoorBlocksScreenState extends ConsumerState<DoorBlocksScreen> {
 
   @override
   Widget build(BuildContext context) => AppShell(
-        title: 'Engellenenler',
+        title: context.tr('Engellenenler', 'Blocked visitors'),
         child: FutureBuilder<List<Map<String, dynamic>>>(
           future: future,
           builder: (context, snapshot) {
@@ -72,8 +74,9 @@ class _DoorBlocksScreenState extends ConsumerState<DoorBlocksScreen> {
             }
             final blocks = snapshot.data ?? const [];
             if (blocks.isEmpty) {
-              return const Center(
-                  child: Text('Aktif cihaz veya ağ engeli yok.'));
+              return Center(
+                  child: Text(context.tr('Aktif cihaz veya ağ engeli yok.',
+                      'There are no active device or network blocks.')));
             }
             return ListView.separated(
               itemCount: blocks.length,
@@ -94,16 +97,22 @@ class _DoorBlocksScreenState extends ConsumerState<DoorBlocksScreen> {
                           ? Icons.wifi_off_rounded
                           : Icons.phonelink_erase_rounded),
                     ),
-                    title: Text(network ? 'Ağ engeli' : 'Cihaz engeli',
+                    title: Text(
+                        network
+                            ? context.tr('Ağ engeli', 'Network block')
+                            : context.tr('Cihaz engeli', 'Device block'),
                         style: const TextStyle(fontWeight: FontWeight.w700)),
                     subtitle: Text(
                       expires == null
-                          ? 'Kalıcı • ${block['reason'] ?? ''}'
-                          : '${expires.toLocal()} tarihine kadar • ${block['reason'] ?? ''}',
+                          ? context.tr('Kalıcı • ${block['reason'] ?? ''}',
+                              'Permanent • ${block['reason'] ?? ''}')
+                          : context.tr(
+                              '${expires.toLocal()} tarihine kadar • ${block['reason'] ?? ''}',
+                              'Until ${expires.toLocal()} • ${block['reason'] ?? ''}'),
                       style: const TextStyle(color: AppColors.muted),
                     ),
                     trailing: IconButton(
-                      tooltip: 'Engeli kaldır',
+                      tooltip: context.tr('Engeli kaldır', 'Remove block'),
                       onPressed: () => remove(block),
                       icon: const Icon(Icons.delete_outline_rounded),
                     ),

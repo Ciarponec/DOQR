@@ -470,5 +470,10 @@ verify_jwt = true
 [functions.store-purchase-verify]
 verify_jwt = true
 
+# App Store Server Notifications V2 requests are authenticated by Apple's
+# signedPayload, which the function verifies against Apple's root certificates.
+[functions.apple-store-notifications]
+verify_jwt = false
+
 [functions.account-delete]
 verify_jwt = true

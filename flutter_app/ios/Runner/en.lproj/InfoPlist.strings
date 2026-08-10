@@ -1,0 +1,2 @@
+"NSCameraUsageDescription" = "Camera access is required for video doorbell calls.";
+"NSMicrophoneUsageDescription" = "Microphone access is required for audio and video doorbell calls.";

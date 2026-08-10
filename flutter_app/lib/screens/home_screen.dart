@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../l10n/app_language.dart';
 import '../models/door_item.dart';
 import '../models/ring_item.dart';
 import '../services/notification_service.dart';
@@ -18,17 +19,25 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
-  static final _privacyUrl =
-      Uri.parse('https://ciarponec.github.io/DOQR/privacy.html');
   late Future<_HomeData> _future;
+  Locale? _registeredLocale;
 
   @override
   void initState() {
     super.initState();
     _future = _load();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final locale = Localizations.localeOf(context);
+    if (_registeredLocale?.languageCode == locale.languageCode) return;
+    _registeredLocale = locale;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      NotificationService.instance.startForUser(
-          ref.read(doqrApiProvider), Localizations.localeOf(context));
+      if (!mounted) return;
+      NotificationService.instance
+          .startForUser(ref.read(doqrApiProvider), locale);
     });
   }
 
@@ -55,12 +64,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         builder: (context, setDialogState) => AlertDialog(
           icon: const Icon(Icons.delete_forever_rounded,
               color: Color(0xFFE54867), size: 36),
-          title: const Text('DOQR hesabını sil?'),
+          title: Text(context.tr('DOQR hesabını sil?', 'Delete DOQR account?')),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
-                'Dijital zillerin, QR bağlantıların, ziyaret geçmişin ve hesapla ilişkili verilerin kalıcı olarak silinir. Bu işlem geri alınamaz. Mağaza aboneliğin varsa ayrıca Google Play veya App Store’dan iptal etmelisin.',
+              Text(
+                context.tr(
+                    'Dijital zillerin, QR bağlantıların, ziyaret geçmişin ve hesapla ilişkili verilerin kalıcı olarak silinir. Bu işlem geri alınamaz. Mağaza aboneliğin varsa ayrıca Google Play veya App Store’dan iptal etmelisin.',
+                    'Your digital doorbells, QR links, visit history, and account-related data will be permanently deleted. This cannot be undone. If you have a store subscription, you must also cancel it in Google Play or the App Store.'),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 14),
@@ -69,7 +80,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 value: accepted,
                 onChanged: (value) =>
                     setDialogState(() => accepted = value == true),
-                title: const Text('Kalıcı silme işlemini anlıyorum.'),
+                title: Text(context.tr('Kalıcı silme işlemini anlıyorum.',
+                    'I understand this deletion is permanent.')),
                 controlAffinity: ListTileControlAffinity.leading,
               ),
             ],
@@ -77,14 +89,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('Vazgeç'),
+              child: Text(context.tr('Vazgeç', 'Cancel')),
             ),
             FilledButton(
               style: FilledButton.styleFrom(
                   backgroundColor: const Color(0xFFE54867)),
               onPressed:
                   accepted ? () => Navigator.pop(dialogContext, true) : null,
-              child: const Text('Hesabımı kalıcı olarak sil'),
+              child: Text(context.tr('Hesabımı kalıcı olarak sil',
+                  'Permanently delete my account')),
             ),
           ],
         ),
@@ -106,8 +119,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     } catch (_) {
       if (!mounted) return;
       Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Hesap silinemedi. Lütfen tekrar dene.'),
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(context.tr('Hesap silinemedi. Lütfen tekrar dene.',
+            'Account could not be deleted. Please try again.')),
       ));
     }
   }
@@ -117,37 +131,41 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         title: 'DOQR',
         actions: [
           PopupMenuButton<String>(
-            tooltip: 'Hesap ve gizlilik',
+            tooltip: context.tr('Hesap ve gizlilik', 'Account and privacy'),
             onSelected: (value) async {
               if (value == 'privacy') {
-                await launchUrl(_privacyUrl,
+                final privacyUrl = Uri.parse(context.isEnglish
+                    ? 'https://ciarponec.github.io/DOQR/privacy-en.html'
+                    : 'https://ciarponec.github.io/DOQR/privacy.html');
+                await launchUrl(privacyUrl,
                     mode: LaunchMode.externalApplication);
               } else if (value == 'delete') {
                 await _deleteAccount();
               }
             },
-            itemBuilder: (_) => const [
+            itemBuilder: (_) => [
               PopupMenuItem(
                 value: 'privacy',
                 child: ListTile(
-                  leading: Icon(Icons.privacy_tip_outlined),
-                  title: Text('Gizlilik politikası'),
+                  leading: const Icon(Icons.privacy_tip_outlined),
+                  title:
+                      Text(context.tr('Gizlilik politikası', 'Privacy policy')),
                   contentPadding: EdgeInsets.zero,
                 ),
               ),
               PopupMenuItem(
                 value: 'delete',
                 child: ListTile(
-                  leading: Icon(Icons.delete_forever_outlined,
+                  leading: const Icon(Icons.delete_forever_outlined,
                       color: Color(0xFFE54867)),
-                  title: Text('Hesabımı sil'),
+                  title: Text(context.tr('Hesabımı sil', 'Delete my account')),
                   contentPadding: EdgeInsets.zero,
                 ),
               ),
             ],
           ),
           IconButton(
-            tooltip: 'Çıkış yap',
+            tooltip: context.tr('Çıkış yap', 'Sign out'),
             onPressed: () async {
               await NotificationService.instance.stopForLogout();
               await Supabase.instance.client.auth.signOut();
@@ -194,16 +212,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       if (mounted) _refresh();
                     },
                     icon: const Icon(Icons.door_front_door_rounded),
-                    label: const Text('Dijital zillerim ve QR kodları'),
+                    label: Text(context.tr('Dijital zillerim ve QR kodları',
+                        'My digital doorbells and QR codes')),
                   ),
                   const SizedBox(height: 22),
                   Row(
                     children: [
-                      const Expanded(child: SectionLabel('Son ziyaretçiler')),
+                      Expanded(
+                          child: SectionLabel(context.tr(
+                              'Son ziyaretçiler', 'Recent visitors'))),
                       Text(
                         data.doors.accountPlan.isPro
-                            ? 'Son 90 gün'
-                            : 'Son 3 kayıt',
+                            ? context.tr('Son 90 gün', 'Last 90 days')
+                            : context.tr('Son 3 kayıt', 'Last 3 records'),
                         style: Theme.of(context)
                             .textTheme
                             .bodySmall
@@ -212,18 +233,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ],
                   ),
                   if (data.rings.isEmpty)
-                    const ElevCard(
+                    ElevCard(
                       child: Padding(
-                        padding: EdgeInsets.symmetric(vertical: 24),
+                        padding: const EdgeInsets.symmetric(vertical: 24),
                         child: Column(
                           children: [
-                            Icon(Icons.notifications_none_rounded,
+                            const Icon(Icons.notifications_none_rounded,
                                 size: 42, color: Color(0xFF94A3B8)),
-                            SizedBox(height: 10),
-                            Text('Henüz ziyaretçi yok'),
-                            SizedBox(height: 4),
-                            Text('QR kodunuz tarandığında burada görünecek.',
-                                style: TextStyle(color: Color(0xFF64748B))),
+                            const SizedBox(height: 10),
+                            Text(context.tr(
+                                'Henüz ziyaretçi yok', 'No visitors yet')),
+                            const SizedBox(height: 4),
+                            Text(
+                                context.tr(
+                                    'QR kodunuz tarandığında burada görünecek.',
+                                    'Visitors will appear here when your QR code is scanned.'),
+                                style:
+                                    const TextStyle(color: Color(0xFF64748B))),
                           ],
                         ),
                       ),
@@ -284,25 +310,34 @@ class _PlanHeader extends StatelessWidget {
                 children: [
                   Text(
                       plan.isTrial
-                          ? 'Mevcut planın: Pro Deneme'
-                          : 'Mevcut planın: ${plan.displayName}',
+                          ? context.tr('Mevcut planın: Pro Deneme',
+                              'Current plan: Pro Trial')
+                          : context.tr('Mevcut planın: ${plan.displayName}',
+                              'Current plan: ${plan.displayName}'),
                       style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 3),
                   Text(
                     plan.isTrial
-                        ? '3 günlük Pro denemen aktif. Süre sona erdiğinde hesabın otomatik olarak Free plana geçecek.'
+                        ? context.tr(
+                            '3 günlük Pro denemen aktif. Süre sona erdiğinde hesabın otomatik olarak Free plana geçecek.',
+                            'Your 3-day Pro trial is active. Your account will automatically switch to Free when it ends.')
                         : plan.isPro
-                            ? 'Pro özelliklerin aktif • yıllık \$14.99'
-                            : 'Free planın aktif • Pro yıllık \$14.99',
+                            ? context.tr(
+                                'Pro özelliklerin aktif • yıllık \$14.99',
+                                'Pro features active • \$14.99/year')
+                            : context.tr(
+                                'Free planın aktif • Pro yıllık \$14.99',
+                                'Free plan active • Pro \$14.99/year'),
                     style: Theme.of(context)
                         .textTheme
                         .bodySmall
                         ?.copyWith(color: const Color(0xFF64748B)),
                   ),
                   const SizedBox(height: 8),
-                  const Text(
-                    'Free ve Pro planları karşılaştır',
-                    style: TextStyle(
+                  Text(
+                    context.tr('Free ve Pro planları karşılaştır',
+                        'Compare Free and Pro plans'),
+                    style: const TextStyle(
                       color: Color(0xFF2F6BFF),
                       fontSize: 11,
                       fontWeight: FontWeight.w800,
@@ -341,22 +376,40 @@ class _RingCard extends StatelessWidget {
           leading: CircleAvatar(child: Icon(icon)),
           title: Text(
               ring.visitorAlias ??
-                  (ring.visitorKind == 'courier' ? 'Kurye' : 'Ziyaretçi'),
+                  (ring.visitorKind == 'courier'
+                      ? context.tr('Kurye', 'Courier')
+                      : context.tr('Ziyaretçi', 'Visitor')),
               style: const TextStyle(fontWeight: FontWeight.w700)),
-          subtitle: Text(
-              '${doorLabel ?? 'Dijital zil'} • ${ring.status} • ${_relative(ring.createdAt)}'),
+          subtitle: Text('${doorLabel ?? context.tr('Dijital zil', 'Doorbell')}'
+              ' • ${_status(context, ring.status)} • ${_relative(context, ring.createdAt)}'),
           trailing: ring.status == 'pending'
-              ? const Chip(label: Text('Çalıyor'))
+              ? Chip(label: Text(context.tr('Çalıyor', 'Ringing')))
               : const Icon(Icons.chevron_right_rounded),
         ),
       );
 
-  String _relative(DateTime value) {
+  String _status(BuildContext context, String status) => switch (status) {
+        'pending' => context.tr('Bekliyor', 'Pending'),
+        'accepted' => context.tr('Yanıtlandı', 'Accepted'),
+        'declined' => context.tr('Reddedildi', 'Declined'),
+        'missed' => context.tr('Cevapsız', 'Missed'),
+        'cancelled' => context.tr('İptal edildi', 'Cancelled'),
+        _ => context.tr('Sona erdi', 'Ended'),
+      };
+
+  String _relative(BuildContext context, DateTime value) {
     final difference = DateTime.now().difference(value.toLocal());
-    if (difference.inMinutes < 1) return 'şimdi';
-    if (difference.inHours < 1) return '${difference.inMinutes} dk önce';
-    if (difference.inDays < 1) return '${difference.inHours} sa önce';
-    return '${difference.inDays} gün önce';
+    if (difference.inMinutes < 1) return context.tr('şimdi', 'now');
+    if (difference.inHours < 1) {
+      return context.tr(
+          '${difference.inMinutes} dk önce', '${difference.inMinutes} min ago');
+    }
+    if (difference.inDays < 1) {
+      return context.tr(
+          '${difference.inHours} sa önce', '${difference.inHours} hr ago');
+    }
+    return context.tr(
+        '${difference.inDays} gün önce', '${difference.inDays} days ago');
   }
 }
 
@@ -374,7 +427,9 @@ class _ErrorState extends StatelessWidget {
             const SizedBox(height: 10),
             Text(message, textAlign: TextAlign.center),
             const SizedBox(height: 12),
-            OutlinedButton(onPressed: retry, child: const Text('Tekrar dene')),
+            OutlinedButton(
+                onPressed: retry,
+                child: Text(context.tr('Tekrar dene', 'Try again'))),
           ],
         ),
       );

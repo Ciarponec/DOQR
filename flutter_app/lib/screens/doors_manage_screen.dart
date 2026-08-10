@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app_config.dart';
+import '../l10n/app_language.dart';
 import '../models/door_item.dart';
 import '../services/providers.dart';
 import '../widgets/app_shell.dart';
@@ -38,28 +39,30 @@ class _DoorsManageScreenState extends ConsumerState<DoorsManageScreen> {
     final accepted = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Yeni dijital zil'),
+        title: Text(context.tr('Yeni dijital zil', 'New digital doorbell')),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
                 controller: label,
                 autofocus: true,
-                decoration: const InputDecoration(labelText: 'Zil adı')),
+                decoration: InputDecoration(
+                    labelText: context.tr('Zil adı', 'Doorbell name'))),
             const SizedBox(height: 10),
             TextField(
                 controller: address,
-                decoration: const InputDecoration(
-                    labelText: 'Adres (yalnızca host görür)')),
+                decoration: InputDecoration(
+                    labelText: context.tr('Adres (yalnızca host görür)',
+                        'Address (visible to hosts only)'))),
           ],
         ),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('Vazgeç')),
+              child: Text(context.tr('Vazgeç', 'Cancel'))),
           FilledButton(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('Oluştur')),
+              child: Text(context.tr('Oluştur', 'Create'))),
         ],
       ),
     );
@@ -94,7 +97,8 @@ class _DoorsManageScreenState extends ConsumerState<DoorsManageScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: Text('${door.label} ayarları'),
+          title: Text(
+              context.tr('${door.label} ayarları', '${door.label} settings')),
           content: SizedBox(
             width: 420,
             child: SingleChildScrollView(
@@ -103,38 +107,42 @@ class _DoorsManageScreenState extends ConsumerState<DoorsManageScreen> {
                 children: [
                   TextField(
                       controller: label,
-                      decoration: const InputDecoration(labelText: 'Zil adı')),
+                      decoration: InputDecoration(
+                          labelText: context.tr('Zil adı', 'Doorbell name'))),
                   const SizedBox(height: 10),
                   TextField(
                       controller: address,
-                      decoration: const InputDecoration(labelText: 'Adres')),
+                      decoration: InputDecoration(
+                          labelText: context.tr('Adres', 'Address'))),
                   const SizedBox(height: 10),
                   TextField(
                       controller: welcome,
                       maxLength: 280,
-                      decoration: const InputDecoration(
-                          labelText: 'Ziyaretçi karşılama mesajı')),
+                      decoration: InputDecoration(
+                          labelText: context.tr('Ziyaretçi karşılama mesajı',
+                              'Visitor welcome message'))),
                   SwitchListTile(
                       contentPadding: EdgeInsets.zero,
                       value: active,
                       onChanged: (value) =>
                           setDialogState(() => active = value),
-                      title: const Text('Dijital zil aktif')),
+                      title: Text(context.tr(
+                          'Dijital zil aktif', 'Digital doorbell active'))),
                   SwitchListTile(
                       contentPadding: EdgeInsets.zero,
                       value: text,
                       onChanged: (value) => setDialogState(() => text = value),
-                      title: const Text('Yazılı görüşme')),
+                      title: Text(context.tr('Yazılı görüşme', 'Text chat'))),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     value: audio,
                     onChanged: door.plan.has('audio_call')
                         ? (value) => setDialogState(() => audio = value)
                         : null,
-                    title: const Text('Sesli görüşme'),
+                    title: Text(context.tr('Sesli görüşme', 'Audio call')),
                     subtitle: door.plan.has('audio_call')
                         ? null
-                        : const Text('Pro özelliği'),
+                        : Text(context.tr('Pro özelliği', 'Pro feature')),
                   ),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
@@ -142,26 +150,29 @@ class _DoorsManageScreenState extends ConsumerState<DoorsManageScreen> {
                     onChanged: door.plan.has('video_call')
                         ? (value) => setDialogState(() => video = value)
                         : null,
-                    title: const Text('Görüntülü görüşme'),
+                    title: Text(context.tr('Görüntülü görüşme', 'Video call')),
                     subtitle: door.plan.has('video_call')
                         ? null
-                        : const Text('Pro özelliği'),
+                        : Text(context.tr('Pro özelliği', 'Pro feature')),
                   ),
                   SwitchListTile(
                       contentPadding: EdgeInsets.zero,
                       value: requireName,
                       onChanged: (value) =>
                           setDialogState(() => requireName = value),
-                      title: const Text('Ziyaretçi adı zorunlu')),
-                  const Align(
+                      title: Text(context.tr(
+                          'Ziyaretçi adı zorunlu', 'Require visitor name'))),
+                  Align(
                       alignment: Alignment.centerLeft,
-                      child: Text('Zil bekleme süresi')),
+                      child: Text(
+                          context.tr('Zil bekleme süresi', 'Ring timeout'))),
                   Slider(
                     value: timeout,
                     min: 15,
                     max: 120,
                     divisions: 7,
-                    label: '${timeout.round()} sn',
+                    label: context.tr(
+                        '${timeout.round()} sn', '${timeout.round()} sec'),
                     onChanged: (value) => setDialogState(() => timeout = value),
                   ),
                 ],
@@ -171,10 +182,10 @@ class _DoorsManageScreenState extends ConsumerState<DoorsManageScreen> {
           actions: [
             TextButton(
                 onPressed: () => Navigator.pop(context, false),
-                child: const Text('Vazgeç')),
+                child: Text(context.tr('Vazgeç', 'Cancel'))),
             FilledButton(
                 onPressed: () => Navigator.pop(context, true),
-                child: const Text('Kaydet')),
+                child: Text(context.tr('Kaydet', 'Save'))),
           ],
         ),
       ),
@@ -230,7 +241,7 @@ class _DoorsManageScreenState extends ConsumerState<DoorsManageScreen> {
 
   @override
   Widget build(BuildContext context) => AppShell(
-        title: 'Dijital ziller',
+        title: context.tr('Dijital ziller', 'Digital doorbells'),
         child: FutureBuilder<DoorListResult>(
           future: _future,
           builder: (context, snapshot) {
@@ -247,7 +258,9 @@ class _DoorsManageScreenState extends ConsumerState<DoorsManageScreen> {
                   children: [
                     Expanded(
                         child: Text(
-                            '${result.doors.length}/${result.accountPlan.maxDoors} zil',
+                            context.tr(
+                                '${result.doors.length}/${result.accountPlan.maxDoors} zil',
+                                '${result.doors.length}/${result.accountPlan.maxDoors} doorbells'),
                             style: Theme.of(context).textTheme.titleMedium)),
                     FilledButton.icon(
                       onPressed:
@@ -255,15 +268,17 @@ class _DoorsManageScreenState extends ConsumerState<DoorsManageScreen> {
                               ? () => _create(result.accountPlan)
                               : null,
                       icon: const Icon(Icons.add_rounded),
-                      label: const Text('Ekle'),
+                      label: Text(context.tr('Ekle', 'Add')),
                     ),
                   ],
                 ),
                 const SizedBox(height: 14),
                 Expanded(
                   child: result.doors.isEmpty
-                      ? const Center(
-                          child: Text('İlk dijital zilini oluşturarak başla.'))
+                      ? Center(
+                          child: Text(context.tr(
+                              'İlk dijital zilini oluşturarak başla.',
+                              'Start by creating your first digital doorbell.')))
                       : ListView.separated(
                           itemCount: result.doors.length,
                           separatorBuilder: (context, index) =>
@@ -271,8 +286,10 @@ class _DoorsManageScreenState extends ConsumerState<DoorsManageScreen> {
                           itemBuilder: (context, index) {
                             final door = result.doors[index];
                             final modes = [
-                              if (door.settings.textEnabled) 'Yazı',
-                              if (door.settings.audioEnabled) 'Ses',
+                              if (door.settings.textEnabled)
+                                context.tr('Yazı', 'Text'),
+                              if (door.settings.audioEnabled)
+                                context.tr('Ses', 'Audio'),
                               if (door.settings.videoEnabled) 'Video',
                             ].join(' • ');
                             return ElevCard(
@@ -287,7 +304,7 @@ class _DoorsManageScreenState extends ConsumerState<DoorsManageScreen> {
                                         style: const TextStyle(
                                             fontWeight: FontWeight.w700)),
                                     subtitle: Text(
-                                        '${door.addressText ?? 'Adres eklenmedi'}\n$modes'),
+                                        '${door.addressText ?? context.tr('Adres eklenmedi', 'No address added')}\n$modes'),
                                     isThreeLine: true,
                                     trailing: door.isOwner
                                         ? IconButton(
@@ -304,8 +321,9 @@ class _DoorsManageScreenState extends ConsumerState<DoorsManageScreen> {
                                                 onPressed: () => _showQr(door),
                                                 icon: const Icon(
                                                     Icons.qr_code_2_rounded),
-                                                label:
-                                                    const Text('QR oluştur'))),
+                                                label: Text(context.tr(
+                                                    'QR oluştur',
+                                                    'Create QR')))),
                                         const SizedBox(width: 8),
                                         Expanded(
                                           child: OutlinedButton.icon(
@@ -322,8 +340,11 @@ class _DoorsManageScreenState extends ConsumerState<DoorsManageScreen> {
                                                 Icons.local_shipping_outlined),
                                             label: Text(
                                                 door.plan.has('courier_notes')
-                                                    ? 'Kurye notları'
-                                                    : 'Kurye (Pro)'),
+                                                    ? context.tr(
+                                                        'Kurye notları',
+                                                        'Courier notes')
+                                                    : context.tr('Kurye (Pro)',
+                                                        'Courier (Pro)')),
                                           ),
                                         ),
                                       ],
@@ -341,8 +362,9 @@ class _DoorsManageScreenState extends ConsumerState<DoorsManageScreen> {
                                           ),
                                         ),
                                         icon: const Icon(Icons.shield_outlined),
-                                        label: const Text(
-                                            'Engellenen cihazlar ve ağlar'),
+                                        label: Text(context.tr(
+                                            'Engellenen cihazlar ve ağlar',
+                                            'Blocked devices and networks')),
                                       ),
                                     ),
                                   ],

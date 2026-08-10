@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
+import '../l10n/app_language.dart';
 import '../models/chat_message_item.dart';
 import '../models/ring_item.dart';
 import '../services/media_session.dart';
@@ -78,8 +79,9 @@ class _RingSessionScreenState extends ConsumerState<RingSessionScreen> {
 
   Future<void> _endForSessionLimit() async {
     if (!mounted || busy || ring?.status != 'accepted') return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('1 dakikalık görüntülü görüşme süresi doldu.')));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(context.tr('1 dakikalık görüntülü görüşme süresi doldu.',
+            'The 1-minute video call limit has ended.'))));
     await _action('end');
   }
 
@@ -128,8 +130,10 @@ class _RingSessionScreenState extends ConsumerState<RingSessionScreen> {
           .read(doqrApiProvider)
           .ringAction(ringId: widget.ringId, action: 'reveal_note');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Hazır kurye notu bu ziyaretçiyle paylaşıldı.')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(context.tr(
+                'Hazır kurye notu bu ziyaretçiyle paylaşıldı.',
+                'The saved courier note was shared with this visitor.'))));
       }
     } catch (error) {
       if (mounted) {
@@ -153,11 +157,13 @@ class _RingSessionScreenState extends ConsumerState<RingSessionScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('Ziyaretçiyi engelle',
+              Text(context.tr('Ziyaretçiyi engelle', 'Block visitor'),
                   style: Theme.of(context).textTheme.headlineSmall),
               const SizedBox(height: 8),
               Text(
-                  'Cihaz engeli önerilir. Ağ engeli aynı Wi-Fi ağındaki başka kişileri de etkileyebilir.',
+                  context.tr(
+                      'Cihaz engeli önerilir. Ağ engeli aynı Wi-Fi ağındaki başka kişileri de etkileyebilir.',
+                      'Device blocking is recommended. Network blocking may also affect other people on the same Wi-Fi network.'),
                   style: Theme.of(context)
                       .textTheme
                       .bodyMedium
@@ -166,16 +172,18 @@ class _RingSessionScreenState extends ConsumerState<RingSessionScreen> {
               FilledButton.icon(
                   onPressed: () => Navigator.pop(context, 'device'),
                   icon: const Icon(Icons.phonelink_erase_rounded),
-                  label: const Text('Bu cihazı kalıcı engelle')),
+                  label: Text(context.tr('Bu cihazı kalıcı engelle',
+                      'Permanently block this device'))),
               const SizedBox(height: 10),
               OutlinedButton.icon(
                   onPressed: () => Navigator.pop(context, 'network'),
                   icon: const Icon(Icons.wifi_off_rounded),
-                  label: const Text('Bu ağı 24 saat engelle')),
+                  label: Text(context.tr('Bu ağı 24 saat engelle',
+                      'Block this network for 24 hours'))),
               const SizedBox(height: 10),
               TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('Vazgeç')),
+                  child: Text(context.tr('Vazgeç', 'Cancel'))),
             ],
           ),
         ),
@@ -187,8 +195,8 @@ class _RingSessionScreenState extends ConsumerState<RingSessionScreen> {
           .read(doqrApiProvider)
           .blockVisitor(ringId: widget.ringId, scope: scope);
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Engel kaydedildi.')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(context.tr('Engel kaydedildi.', 'Block saved.'))));
       }
     } catch (error) {
       if (mounted) {
@@ -211,24 +219,38 @@ class _RingSessionScreenState extends ConsumerState<RingSessionScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Güvenlik bilgileri',
+              Text(context.tr('Güvenlik bilgileri', 'Security information'),
                   style: Theme.of(context).textTheme.headlineSmall),
               const SizedBox(height: 8),
               Text(
-                  'Bu bilgiler ziyaretçiye önceden açıklanır. Kimlik doğrulamaz; kötüye kullanım incelemesine yardımcı olur.',
+                  context.tr(
+                      'Bu bilgiler ziyaretçiye önceden açıklanır. Kimlik doğrulamaz; kötüye kullanım incelemesine yardımcı olur.',
+                      'This information is disclosed to the visitor in advance. It does not verify identity; it helps investigate misuse.'),
                   style: Theme.of(context)
                       .textTheme
                       .bodyMedium
                       ?.copyWith(color: AppColors.muted)),
               const SizedBox(height: 16),
               _InfoRow(
-                  'Platform', metadata['platform']?.toString() ?? 'Bilinmiyor'),
-              _InfoRow('Dil', metadata['language']?.toString() ?? 'Bilinmiyor'),
-              _InfoRow('Saat dilimi',
-                  metadata['timezone']?.toString() ?? 'Bilinmiyor'),
-              _InfoRow('Ekran', metadata['screen']?.toString() ?? 'Bilinmiyor'),
-              _InfoRow('İşlemci iş parçacığı',
-                  metadata['hardware_concurrency']?.toString() ?? 'Bilinmiyor'),
+                  context.tr('Platform', 'Platform'),
+                  metadata['platform']?.toString() ??
+                      context.tr('Bilinmiyor', 'Unknown')),
+              _InfoRow(
+                  context.tr('Dil', 'Language'),
+                  metadata['language']?.toString() ??
+                      context.tr('Bilinmiyor', 'Unknown')),
+              _InfoRow(
+                  context.tr('Saat dilimi', 'Time zone'),
+                  metadata['timezone']?.toString() ??
+                      context.tr('Bilinmiyor', 'Unknown')),
+              _InfoRow(
+                  context.tr('Ekran', 'Screen'),
+                  metadata['screen']?.toString() ??
+                      context.tr('Bilinmiyor', 'Unknown')),
+              _InfoRow(
+                  context.tr('İşlemci iş parçacığı', 'Hardware threads'),
+                  metadata['hardware_concurrency']?.toString() ??
+                      context.tr('Bilinmiyor', 'Unknown')),
             ],
           ),
         ),
@@ -249,29 +271,35 @@ class _RingSessionScreenState extends ConsumerState<RingSessionScreen> {
   Widget build(BuildContext context) {
     if (loadError != null) {
       return AppShell(
-          title: 'Ziyaret', child: Center(child: Text(loadError.toString())));
+          title: context.tr('Ziyaret', 'Visit'),
+          child: Center(child: Text(loadError.toString())));
     }
     final item = ring;
     if (item == null) {
-      return const AppShell(
-          title: 'Ziyaret', child: Center(child: CircularProgressIndicator()));
+      return AppShell(
+          title: context.tr('Ziyaret', 'Visit'),
+          child: const Center(child: CircularProgressIndicator()));
     }
     final compact = MediaQuery.viewInsetsOf(context).bottom > 0 ||
         MediaQuery.sizeOf(context).height < 650;
     return AppShell(
       title: item.visitorAlias ??
-          (item.visitorKind == 'courier' ? 'Kurye ziyareti' : 'Ziyaretçi'),
+          (item.visitorKind == 'courier'
+              ? context.tr('Kurye ziyareti', 'Courier visit')
+              : context.tr('Ziyaretçi', 'Visitor')),
       actions: [
         IconButton(
-            tooltip: 'Güvenlik bilgileri',
+            tooltip: context.tr('Güvenlik bilgileri', 'Security information'),
             onPressed: _showSecurityInfo,
             icon: const Icon(Icons.shield_outlined)),
         PopupMenuButton<String>(
           onSelected: (value) {
             if (value == 'block') _blockVisitor();
           },
-          itemBuilder: (_) => const [
-            PopupMenuItem(value: 'block', child: Text('Ziyaretçiyi engelle'))
+          itemBuilder: (_) => [
+            PopupMenuItem(
+                value: 'block',
+                child: Text(context.tr('Ziyaretçiyi engelle', 'Block visitor')))
           ],
         ),
       ],
@@ -288,12 +316,14 @@ class _RingSessionScreenState extends ConsumerState<RingSessionScreen> {
                   const SizedBox(width: 12),
                   Expanded(
                       child: Text(
-                          '${item.courierCode ?? 'Kurye'} seçimi ziyaretçinin kendi beyanıdır.',
+                          context.tr(
+                              '${item.courierCode ?? 'Kurye'} seçimi ziyaretçinin kendi beyanıdır.',
+                              'The ${item.courierCode ?? 'Courier'} selection is provided by the visitor.'),
                           style: Theme.of(context).textTheme.bodyMedium)),
                   if (item.courierNoteId != null)
                     TextButton(
                         onPressed: busy ? null : _shareCourierNote,
-                        child: const Text('Notu paylaş')),
+                        child: Text(context.tr('Notu paylaş', 'Share note'))),
                 ],
               ),
             ),
@@ -306,13 +336,13 @@ class _RingSessionScreenState extends ConsumerState<RingSessionScreen> {
                     child: OutlinedButton.icon(
                         onPressed: busy ? null : () => _action('decline'),
                         icon: const Icon(Icons.close_rounded),
-                        label: const Text('Reddet'))),
+                        label: Text(context.tr('Reddet', 'Decline')))),
                 const SizedBox(width: 10),
                 Expanded(
                     child: FilledButton.icon(
                         onPressed: busy ? null : () => _action('accept'),
                         icon: Icon(_modeIcon(item.requestedMode)),
-                        label: const Text('Yanıtla'))),
+                        label: Text(context.tr('Yanıtla', 'Answer')))),
               ],
             ),
           ],
@@ -365,13 +395,13 @@ class _SessionHero extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(_modeLabel(ring.requestedMode),
+                  Text(_modeLabel(context, ring.requestedMode),
                       style: Theme.of(context)
                           .textTheme
                           .titleLarge
                           ?.copyWith(color: Colors.white)),
                   const SizedBox(height: 4),
-                  Text(_statusLabel(ring.status),
+                  Text(_statusLabel(context, ring.status),
                       style: Theme.of(context)
                           .textTheme
                           .bodyMedium
@@ -394,18 +424,18 @@ class _SessionHero extends StatelessWidget {
         ),
       );
 
-  String _modeLabel(String mode) => switch (mode) {
-        'video' => 'Görüntülü görüşme',
-        'audio' => 'Sesli görüşme',
-        _ => 'Yazılı görüşme'
+  String _modeLabel(BuildContext context, String mode) => switch (mode) {
+        'video' => context.tr('Görüntülü görüşme', 'Video call'),
+        'audio' => context.tr('Sesli görüşme', 'Audio call'),
+        _ => context.tr('Yazılı görüşme', 'Text chat')
       };
-  String _statusLabel(String status) => switch (status) {
-        'pending' => 'Zil çalıyor…',
-        'accepted' => 'Görüşme aktif',
-        'declined' => 'Reddedildi',
-        'missed' => 'Cevapsız ziyaret',
-        'cancelled' => 'Ziyaretçi iptal etti',
-        _ => 'Görüşme sona erdi',
+  String _statusLabel(BuildContext context, String status) => switch (status) {
+        'pending' => context.tr('Zil çalıyor…', 'Ringing…'),
+        'accepted' => context.tr('Görüşme aktif', 'Call active'),
+        'declined' => context.tr('Reddedildi', 'Declined'),
+        'missed' => context.tr('Cevapsız ziyaret', 'Missed visit'),
+        'cancelled' => context.tr('Ziyaretçi iptal etti', 'Visitor cancelled'),
+        _ => context.tr('Görüşme sona erdi', 'Call ended'),
       };
 }
 
@@ -469,7 +499,7 @@ class _MediaPanel extends StatelessWidget {
                             color: AppColors.ink.withValues(alpha: 0.72),
                             borderRadius: BorderRadius.circular(99)),
                         child: Text(
-                          _formatRemaining(media.remainingSeconds),
+                          _formatRemaining(context, media.remainingSeconds),
                           style: const TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.w800,
@@ -493,7 +523,10 @@ class _MediaPanel extends StatelessWidget {
                     const Icon(Icons.graphic_eq_rounded,
                         color: AppColors.cyan, size: 50),
                     const SizedBox(height: 8),
-                    Text(media.connected ? 'Bağlandı' : 'Bağlanıyor…',
+                    Text(
+                        media.connected
+                            ? context.tr('Bağlandı', 'Connected')
+                            : context.tr('Bağlanıyor…', 'Connecting…'),
                         style: Theme.of(context)
                             .textTheme
                             .titleMedium
@@ -529,9 +562,11 @@ class _MediaPanel extends StatelessWidget {
     );
   }
 
-  String _formatRemaining(int? value) {
+  String _formatRemaining(BuildContext context, int? value) {
     final seconds = (value ?? 60).clamp(0, 60);
-    return 'En fazla 1 dk · 00:${seconds.toString().padLeft(2, '0')}';
+    return context.tr(
+        'En fazla 1 dk · 00:${seconds.toString().padLeft(2, '0')}',
+        'Up to 1 min · 00:${seconds.toString().padLeft(2, '0')}');
   }
 }
 
@@ -543,8 +578,9 @@ class _ConnectingLabel extends StatelessWidget {
         decoration: BoxDecoration(
             color: AppColors.ink.withValues(alpha: 0.7),
             borderRadius: BorderRadius.circular(99)),
-        child: const Text('Bağlanıyor…',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+        child: Text(context.tr('Bağlanıyor…', 'Connecting…'),
+            style: const TextStyle(
+                color: Colors.white, fontWeight: FontWeight.w700)),
       );
 }
 
@@ -583,7 +619,9 @@ class _ChatPanel extends ConsumerWidget {
                 final messages = snapshot.data ?? const <ChatMessageItem>[];
                 if (messages.isEmpty) {
                   return Center(
-                      child: Text('Mesajlaşmayı başlatın',
+                      child: Text(
+                          context.tr('Mesajlaşmayı başlatın',
+                              'Start the conversation'),
                           style: Theme.of(context)
                               .textTheme
                               .bodyMedium
@@ -642,9 +680,10 @@ class _ChatPanel extends ConsumerWidget {
                   controller: input,
                   textInputAction: TextInputAction.send,
                   onSubmitted: (_) => onSend(),
-                  decoration: const InputDecoration(
-                      hintText: 'Mesaj yazın…',
-                      prefixIcon: Icon(Icons.chat_bubble_outline_rounded)),
+                  decoration: InputDecoration(
+                      hintText: context.tr('Mesaj yazın…', 'Write a message…'),
+                      prefixIcon:
+                          const Icon(Icons.chat_bubble_outline_rounded)),
                 ),
               ),
               const SizedBox(width: 8),

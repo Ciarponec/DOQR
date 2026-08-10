@@ -1,13 +1,15 @@
 name: doqr_app
 description: DOQR Flutter app (owner/shared user client)
 publish_to: "none"
-version: 0.1.0+6
+version: 1.0.0+6
 
 environment:
   sdk: ">=3.3.0 <4.0.0"
 
 dependencies:
   flutter:
+    sdk: flutter
+  flutter_localizations:
     sdk: flutter
   supabase_flutter: ^2.17.1
   flutter_riverpod: ^2.6.1
@@ -20,6 +22,7 @@ dependencies:
   in_app_purchase: ^3.3.0
   crypto: ^3.0.6
   url_launcher: ^6.3.2
+  shared_preferences: ^2.5.4
 
 dev_dependencies:
   flutter_test:

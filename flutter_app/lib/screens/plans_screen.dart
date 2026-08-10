@@ -1,5 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../l10n/app_language.dart';
 import '../models/door_item.dart';
 import '../models/plan_catalog.dart';
 import '../services/store_purchase_service.dart';
@@ -16,6 +19,11 @@ class PlansScreen extends StatefulWidget {
 }
 
 class _PlansScreenState extends State<PlansScreen> {
+  static final _termsUrl = Uri.parse(
+      'https://www.apple.com/legal/internet-services/itunes/dev/stdeula/');
+  static final _manageSubscriptionsUrl =
+      Uri.parse('https://apps.apple.com/account/subscriptions');
+
   final _store = StorePurchaseService.instance;
   bool _handlingSuccess = false;
 
@@ -39,7 +47,9 @@ class _PlansScreenState extends State<PlansScreen> {
       Future.microtask(() {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('DOQR Pro hesabında etkinleştirildi.')),
+          SnackBar(
+              content: Text(context.tr('DOQR Pro hesabında etkinleştirildi.',
+                  'DOQR Pro has been activated on your account.'))),
         );
         Navigator.of(context).pop(true);
       });
@@ -47,52 +57,96 @@ class _PlansScreenState extends State<PlansScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => AppShell(
-        title: 'Planlar',
-        child: ListView(
-          children: [
-            _CurrentPlanCard(plan: widget.currentPlan),
-            const SizedBox(height: 22),
-            const SectionLabel('Planları karşılaştır'),
-            _PlanColumns(proPrice: _store.displayPrice),
-            const SizedBox(height: 18),
-            FilledButton.icon(
-              onPressed: widget.currentPlan.isPro && !widget.currentPlan.isTrial
-                  ? null
-                  : (_store.processing ? null : _store.buyPro),
-              icon: const Icon(Icons.workspace_premium_rounded),
-              label:
-                  Text(widget.currentPlan.isPro && !widget.currentPlan.isTrial
-                      ? 'Pro planın aktif'
-                      : _store.processing
-                          ? 'Mağaza onayı bekleniyor…'
-                          : "Pro'yu Satın Al • ${_store.displayPrice} / yıl"),
-            ),
-            if (_store.loading) ...[
-              const SizedBox(height: 10),
-              const LinearProgressIndicator(),
-            ],
-            if (_store.error != null) ...[
-              const SizedBox(height: 10),
-              Text(
-                _store.error!,
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: AppColors.danger, fontSize: 12),
-              ),
-            ],
-            TextButton(
-              onPressed: _store.processing ? null : _store.restorePurchases,
-              child: const Text('Satın almayı geri yükle'),
-            ),
+  Widget build(BuildContext context) {
+    _store.setLocale(Localizations.localeOf(context));
+    return AppShell(
+      title: context.tr('Planlar', 'Plans'),
+      child: ListView(
+        children: [
+          _CurrentPlanCard(
+            plan: widget.currentPlan,
+            proPrice: _store.displayPrice,
+          ),
+          const SizedBox(height: 22),
+          SectionLabel(context.tr('Planları karşılaştır', 'Compare plans')),
+          _PlanColumns(proPrice: _store.displayPrice),
+          const SizedBox(height: 18),
+          FilledButton.icon(
+            onPressed: widget.currentPlan.isPro && !widget.currentPlan.isTrial
+                ? null
+                : (_store.processing ? null : _store.buyPro),
+            icon: const Icon(Icons.workspace_premium_rounded),
+            label: Text(widget.currentPlan.isPro && !widget.currentPlan.isTrial
+                ? context.tr('Pro planın aktif', 'Your Pro plan is active')
+                : _store.processing
+                    ? context.tr('Mağaza onayı bekleniyor…',
+                        'Waiting for store approval…')
+                    : context.tr(
+                        "Pro'yu Satın Al • ${_store.displayPrice} / yıl",
+                        'Buy Pro • ${_store.displayPrice} / year')),
+          ),
+          if (_store.loading) ...[
             const SizedBox(height: 10),
-            const Text(
-              'DOQR Pro yıllık ve otomatik yenilenen bir aboneliktir. Ücret, mağaza hesabınızdan tahsil edilir. Yenilemeyi Google Play veya App Store abonelik ayarlarından istediğiniz zaman iptal edebilirsiniz; ödenmiş dönem sonuna kadar Pro erişiminiz sürer.',
+            const LinearProgressIndicator(),
+          ],
+          if (_store.error != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              _store.error!,
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.muted, fontSize: 11),
+              style: const TextStyle(color: AppColors.danger, fontSize: 12),
             ),
           ],
-        ),
-      );
+          TextButton(
+            onPressed: _store.processing ? null : _store.restorePurchases,
+            child: Text(
+                context.tr('Satın almayı geri yükle', 'Restore purchases')),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            context.tr(
+                'DOQR Pro yıllık ve otomatik yenilenen bir aboneliktir. Ücret, mağaza hesabınızdan tahsil edilir. Yenilemeyi Google Play veya App Store abonelik ayarlarından istediğiniz zaman iptal edebilirsiniz; ödenmiş dönem sonuna kadar Pro erişiminiz sürer.',
+                'DOQR Pro is an annual, auto-renewing subscription. Payment is charged to your store account. You can cancel renewal at any time in your Google Play or App Store subscription settings; Pro access continues through the paid period.'),
+            textAlign: TextAlign.center,
+            style: TextStyle(color: AppColors.muted, fontSize: 11),
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 4,
+            children: [
+              TextButton(
+                onPressed: () => launchUrl(
+                  Uri.parse(context.isEnglish
+                      ? 'https://ciarponec.github.io/DOQR/privacy-en.html'
+                      : 'https://ciarponec.github.io/DOQR/privacy.html'),
+                  mode: LaunchMode.externalApplication,
+                ),
+                child:
+                    Text(context.tr('Gizlilik Politikası', 'Privacy Policy')),
+              ),
+              TextButton(
+                onPressed: () => launchUrl(
+                  _termsUrl,
+                  mode: LaunchMode.externalApplication,
+                ),
+                child: Text(context.tr('Kullanım Koşulları', 'Terms of Use')),
+              ),
+              if (defaultTargetPlatform == TargetPlatform.iOS)
+                TextButton(
+                  onPressed: () => launchUrl(
+                    _manageSubscriptionsUrl,
+                    mode: LaunchMode.externalApplication,
+                  ),
+                  child: Text(
+                      context.tr('Aboneliği Yönet', 'Manage Subscription')),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _PlanColumns extends StatelessWidget {
@@ -112,7 +166,8 @@ class _PlanColumns extends StatelessWidget {
                   child: _PlanCard(
                     title: 'Free',
                     price: r'$0',
-                    subtitle: 'Temel dijital zil özellikleri.',
+                    subtitle: context.tr('Temel dijital zil özellikleri.',
+                        'Essential digital doorbell features.'),
                     icon: Icons.qr_code_2_rounded,
                     accent: AppColors.blue,
                     features: PlanCatalog.freeFeatures,
@@ -123,8 +178,9 @@ class _PlanColumns extends StatelessWidget {
                 Expanded(
                   child: _PlanCard(
                     title: 'Pro',
-                    price: '$proPrice / yıl',
-                    subtitle: 'Görüşme, kurye ve uzun geçmiş.',
+                    price: context.tr('$proPrice / yıl', '$proPrice / year'),
+                    subtitle: context.tr('Görüşme, kurye ve uzun geçmiş.',
+                        'Calling, courier tools, and extended history.'),
                     icon: Icons.workspace_premium_rounded,
                     accent: AppColors.warning,
                     features: PlanCatalog.proFeatures,
@@ -141,23 +197,34 @@ class _PlanColumns extends StatelessWidget {
 
 class _CurrentPlanCard extends StatelessWidget {
   final PlanItem plan;
+  final String proPrice;
 
-  const _CurrentPlanCard({required this.plan});
+  const _CurrentPlanCard({required this.plan, required this.proPrice});
 
-  String get title {
-    if (plan.isTrial) return 'Mevcut planın: Pro Deneme';
-    if (plan.isPro) return 'Mevcut planın: Pro';
-    return 'Mevcut planın: Free';
-  }
-
-  String get description {
+  String title(BuildContext context) {
     if (plan.isTrial) {
-      return '3 günlük Pro denemen devam ediyor. Deneme sona erdiğinde hesabın otomatik olarak Free plana geçecek.';
+      return context.tr('Mevcut planın: Pro Deneme', 'Current plan: Pro Trial');
     }
     if (plan.isPro) {
-      return 'Pro özelliklerin aktif. Plan ücretin yıllık \$14.99.';
+      return context.tr('Mevcut planın: Pro', 'Current plan: Pro');
     }
-    return "Free planın aktif. Dilediğin zaman yıllık \$14.99 karşılığında Pro'ya geçebilirsin.";
+    return context.tr('Mevcut planın: Free', 'Current plan: Free');
+  }
+
+  String description(BuildContext context) {
+    if (plan.isTrial) {
+      return context.tr(
+          '3 günlük Pro denemen devam ediyor. Deneme sona erdiğinde hesabın otomatik olarak Free plana geçecek.',
+          'Your 3-day Pro trial is active. Your account will automatically switch to Free when it ends.');
+    }
+    if (plan.isPro) {
+      return context.tr(
+          'Pro özelliklerin aktif. Aboneliğini mağaza hesabından yönetebilirsin.',
+          'Your Pro features are active. You can manage the subscription from your store account.');
+    }
+    return context.tr(
+        "Free planın aktif. Dilediğin zaman yıllık $proPrice karşılığında Pro'ya geçebilirsin.",
+        'Your Free plan is active. You can upgrade to Pro for $proPrice per year at any time.');
   }
 
   @override
@@ -185,20 +252,21 @@ class _CurrentPlanCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title,
+                  Text(title(context),
                       style: Theme.of(context)
                           .textTheme
                           .titleMedium
                           ?.copyWith(color: Colors.white)),
                   const SizedBox(height: 5),
-                  Text(description,
+                  Text(description(context),
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: Colors.white.withValues(alpha: 0.78))),
                   if (plan.isTrial) ...[
                     const SizedBox(height: 10),
-                    const Text(
-                      'Deneme hakkı: 30 dk ses • 15 dk görüntü',
-                      style: TextStyle(
+                    Text(
+                      context.tr('Deneme hakkı: 30 dk ses • 15 dk görüntü',
+                          'Trial allowance: 30 min audio • 15 min video'),
+                      style: const TextStyle(
                           color: Color(0xFFB9F4FF),
                           fontSize: 11,
                           fontWeight: FontWeight.w700),
@@ -291,14 +359,14 @@ class _FeatureRow extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(feature.title,
+                  Text(feature.titleFor(context.isEnglish),
                       style: TextStyle(
                           fontSize: compact ? 11 : 14,
                           height: compact ? 1.3 : 1.5,
                           fontWeight: FontWeight.w700)),
                   if (!compact) ...[
                     const SizedBox(height: 2),
-                    Text(feature.detail,
+                    Text(feature.detailFor(context.isEnglish),
                         style: Theme.of(context)
                             .textTheme
                             .bodySmall

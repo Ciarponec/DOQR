@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
+import '../l10n/app_language.dart';
 import '../models/chat_message_item.dart';
 import '../models/courier_note_item.dart';
 import '../models/door_item.dart';
@@ -29,7 +30,8 @@ class DoqrApi {
     if (data is Map && data['error'] != null) {
       throw Exception(data['error'].toString());
     }
-    throw Exception('İstek başarısız (${response.status})');
+    throw Exception(appText('İstek başarısız (${response.status})',
+        'Request failed (${response.status})'));
   }
 
   Future<Map<String, dynamic>> verifyStorePurchase({

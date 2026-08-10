@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../l10n/app_language.dart';
 import 'doqr_api.dart';
 
 String mediaSessionErrorMessage(Object exception) {
@@ -13,10 +14,13 @@ String mediaSessionErrorMessage(Object exception) {
       return details['error'] as String;
     }
     if (exception.status >= 500 || exception.status == 0) {
-      return 'Görüşme altyapısına şu anda ulaşılamıyor. Lütfen tekrar deneyin.';
+      return appText(
+          'Görüşme altyapısına şu anda ulaşılamıyor. Lütfen tekrar deneyin.',
+          'The calling service is currently unavailable. Please try again.');
     }
   }
-  return 'Görüşme başlatılamadı. Lütfen tekrar deneyin.';
+  return appText('Görüşme başlatılamadı. Lütfen tekrar deneyin.',
+      'The call could not be started. Please try again.');
 }
 
 class MediaSessionController extends ChangeNotifier {
@@ -77,7 +81,8 @@ class MediaSessionController extends ChangeNotifier {
         _connected =
             state == RTCPeerConnectionState.RTCPeerConnectionStateConnected;
         if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed) {
-          _error = 'Görüşme bağlantısı kurulamadı.';
+          _error = appText('Görüşme bağlantısı kurulamadı.',
+              'The call connection could not be established.');
         }
         _notify();
       };
@@ -93,7 +98,9 @@ class MediaSessionController extends ChangeNotifier {
           .stream(primaryKey: ['ring_id'])
           .eq('ring_id', ringId)
           .listen(_onSignalRows, onError: (Object error) {
-            _error = 'Görüşme sinyali alınamadı. Lütfen tekrar deneyin.';
+            _error = appText(
+                'Görüşme sinyali alınamadı. Lütfen tekrar deneyin.',
+                'The call signal could not be received. Please try again.');
             _notify();
           });
 
@@ -121,7 +128,8 @@ class MediaSessionController extends ChangeNotifier {
       await _waitForIceGathering(_peer!);
       final completeOffer = await _peer!.getLocalDescription();
       if (completeOffer?.sdp == null || completeOffer!.sdp!.isEmpty) {
-        throw StateError('WebRTC teklifi oluşturulamadı.');
+        throw StateError(appText('WebRTC teklifi oluşturulamadı.',
+            'The WebRTC offer could not be created.'));
       }
       await client.from('webrtc_signals').insert({
         'ring_id': ringId,

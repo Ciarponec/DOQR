@@ -9,6 +9,10 @@ import {
   serviceClient,
   sha256Hex,
 } from "../_shared/utils.ts";
+import {
+  APPLE_PRO_PRODUCT_ID,
+  verifyAppleTransaction,
+} from "../_shared/apple_store.ts";
 
 const PACKAGE_NAME = "com.doqr.app";
 const PRO_PRODUCT_ID = "doqr_pro_annual";
@@ -40,10 +44,10 @@ function base64Url(input: Uint8Array | string): string {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-function pemToBytes(pem: string): Uint8Array {
+function pemToBytes(pem: string): ArrayBuffer {
   const base64 = pem.replace(/-----[^-]+-----/g, "").replace(/\s/g, "");
   const binary = atob(base64);
-  return Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  return Uint8Array.from(binary, (char) => char.charCodeAt(0)).buffer;
 }
 
 async function googleAccessToken(account: ServiceAccount): Promise<string> {
@@ -113,6 +117,124 @@ async function playRequest(
   });
 }
 
+async function verifyApplePurchase(
+  userId: string,
+  productId: string,
+  signedTransaction: string,
+) {
+  if (productId !== APPLE_PRO_PRODUCT_ID) {
+    throw new HttpError(400, "Geçersiz mağaza ürünü", "INVALID_PRODUCT");
+  }
+  const transaction = await verifyAppleTransaction(signedTransaction);
+  if (transaction.productId !== APPLE_PRO_PRODUCT_ID) {
+    throw new HttpError(
+      400,
+      "Satın alınan ürün eşleşmiyor",
+      "PRODUCT_MISMATCH",
+    );
+  }
+  if (transaction.type !== "Auto-Renewable Subscription") {
+    throw new HttpError(
+      400,
+      "Satın alma bir App Store aboneliği değil",
+      "PRODUCT_TYPE_MISMATCH",
+    );
+  }
+  if (transaction.appAccountToken?.toLowerCase() !== userId.toLowerCase()) {
+    throw new HttpError(
+      403,
+      "Satın alma bu DOQR hesabına ait değil",
+      "ACCOUNT_MISMATCH",
+    );
+  }
+
+  const transactionId = transaction.transactionId;
+  const originalTransactionId = transaction.originalTransactionId;
+  const expiresDate = transaction.expiresDate;
+  if (!transactionId || !originalTransactionId || !Number.isFinite(expiresDate)) {
+    throw new HttpError(
+      400,
+      "App Store işlem bilgisi eksik",
+      "APPLE_TRANSACTION_INVALID",
+    );
+  }
+
+  const admin = serviceClient();
+  const { data: owner, error: ownerError } = await admin
+    .from("store_purchase_records")
+    .select("user_id")
+    .eq("provider", "apple")
+    .eq("original_transaction_id", originalTransactionId)
+    .limit(1)
+    .maybeSingle();
+  if (ownerError) throw new Error(ownerError.message);
+  if (owner && owner.user_id !== userId) {
+    throw new HttpError(
+      409,
+      "Bu satın alma başka bir hesaba bağlı",
+      "PURCHASE_OWNERSHIP_CONFLICT",
+    );
+  }
+
+  const currentPeriodEndMs = expiresDate!;
+  const entitlementActive = transaction.revocationDate == null &&
+    currentPeriodEndMs > Date.now();
+  const periodEnd = new Date(currentPeriodEndMs).toISOString();
+  const state = transaction.revocationDate != null
+    ? "REVOKED"
+    : entitlementActive
+    ? "ACTIVE"
+    : "EXPIRED";
+  const tokenHash = await sha256Hex(`apple:${transactionId}`);
+  const now = new Date().toISOString();
+
+  const { error: recordError } = await admin.from("store_purchase_records")
+    .upsert({
+      user_id: userId,
+      provider: "apple",
+      product_id: APPLE_PRO_PRODUCT_ID,
+      purchase_token_hash: tokenHash,
+      original_transaction_id: originalTransactionId,
+      store_state: state,
+      entitlement_active: entitlementActive,
+      current_period_end: periodEnd,
+      acknowledgement_state: transaction.environment ?? null,
+      last_verified_at: now,
+      updated_at: now,
+    }, { onConflict: "provider,purchase_token_hash" });
+  if (recordError) throw new Error(recordError.message);
+
+  const { error: subscriptionError } = await admin.from("user_subscriptions")
+    .upsert({
+      user_id: userId,
+      plan_id: "pro",
+      status: entitlementActive ? "active" : "expired",
+      provider: "apple",
+      provider_customer_id: userId,
+      provider_subscription_id: originalTransactionId,
+      product_id: APPLE_PRO_PRODUCT_ID,
+      current_period_end: periodEnd,
+      trial_started_at: null,
+      trial_ends_at: null,
+      updated_at: now,
+    }, { onConflict: "user_id" });
+  if (subscriptionError) throw new Error(subscriptionError.message);
+
+  if (!entitlementActive) {
+    throw new HttpError(
+      409,
+      "Abonelik etkin değil veya süresi dolmuş",
+      "ENTITLEMENT_INACTIVE",
+    );
+  }
+  return {
+    verified: true,
+    plan_id: "pro",
+    status: "active",
+    current_period_end: periodEnd,
+  };
+}
+
 Deno.serve(async (req) => {
   const preflight = options(req);
   if (preflight) return preflight;
@@ -124,8 +246,15 @@ Deno.serve(async (req) => {
     const productId = cleanText(body.product_id, 200, true)!;
     const purchaseToken = cleanText(body.verification_data, 8_000, true)!;
 
+    if (provider === "apple") {
+      return json(
+        200,
+        await verifyApplePurchase(user.id, productId, purchaseToken),
+        req,
+      );
+    }
     if (provider !== "google") {
-      throw new HttpError(501, "App Store satın alma doğrulaması henüz etkin değil", "STORE_NOT_READY");
+      throw new HttpError(400, "Geçersiz mağaza sağlayıcısı", "INVALID_PROVIDER");
     }
     if (productId !== PRO_PRODUCT_ID) {
       throw new HttpError(400, "Geçersiz mağaza ürünü", "INVALID_PRODUCT");

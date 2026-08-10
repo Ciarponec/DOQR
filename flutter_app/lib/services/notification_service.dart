@@ -104,8 +104,14 @@ class NotificationService {
       if (message.data['type'] != 'doorbell_ring') return;
       await _local.show(
         id: message.data['ring_id']?.hashCode ?? message.hashCode,
-        title: message.notification?.title ?? 'DOQR: Zil çalıyor',
-        body: message.notification?.body ?? 'Kapıda bir ziyaretçi var',
+        title: message.notification?.title ??
+            (locale.languageCode == 'en'
+                ? 'DOQR: Doorbell ringing'
+                : 'DOQR: Zil çalıyor'),
+        body: message.notification?.body ??
+            (locale.languageCode == 'en'
+                ? 'There is a visitor at the door'
+                : 'Kapıda bir ziyaretçi var'),
         notificationDetails: const NotificationDetails(
           android: AndroidNotificationDetails(
             'doqr_rings',

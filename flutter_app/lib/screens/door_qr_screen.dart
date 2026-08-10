@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../l10n/app_language.dart';
 import '../widgets/app_shell.dart';
 
 class DoorQrScreen extends StatelessWidget {
@@ -25,8 +26,9 @@ class DoorQrScreen extends StatelessWidget {
               children: [
                 QrImageView(data: qrUrl, version: QrVersions.auto, size: 250),
                 const SizedBox(height: 14),
-                const Align(
-                    alignment: Alignment.centerLeft, child: Text('QR Linki')),
+                Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(context.tr('QR Linki', 'QR Link'))),
                 SelectableText(qrUrl),
                 const SizedBox(height: 8),
                 const Align(

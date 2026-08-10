@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -22,6 +23,7 @@ class StorePurchaseService extends ChangeNotifier {
   bool _loading = false;
   bool _processing = false;
   bool _entitlementActivated = false;
+  Locale _locale = const Locale('tr');
   String? _error;
 
   ProductDetails? get product => _product;
@@ -29,7 +31,15 @@ class StorePurchaseService extends ChangeNotifier {
   bool get loading => _loading;
   bool get processing => _processing;
   String? get error => _error;
-  String get displayPrice => _product?.price ?? r'$14.99';
+  String get displayPrice =>
+      _product?.price ?? _message('Mağazada gösterilir', 'Shown in the store');
+
+  void setLocale(Locale locale) {
+    _locale = locale;
+  }
+
+  String _message(String turkish, String english) =>
+      _locale.languageCode == 'en' ? english : turkish;
 
   bool takeEntitlementActivated() {
     if (!_entitlementActivated) return false;
@@ -49,7 +59,8 @@ class StorePurchaseService extends ChangeNotifier {
       _onPurchaseUpdates,
       onError: (Object error) {
         _processing = false;
-        _error = 'Mağaza bağlantısı kesildi. Lütfen tekrar deneyin.';
+        _error = _message('Mağaza bağlantısı kesildi. Lütfen tekrar deneyin.',
+            'The store connection was interrupted. Please try again.');
         notifyListeners();
       },
     );
@@ -63,23 +74,28 @@ class StorePurchaseService extends ChangeNotifier {
     try {
       _storeAvailable = await _store.isAvailable();
       if (!_storeAvailable) {
-        _error = 'Cihazdaki mağaza şu anda kullanılamıyor.';
+        _error = _message('Cihazdaki mağaza şu anda kullanılamıyor.',
+            'The store is currently unavailable on this device.');
         return;
       }
       final response = await _store.queryProductDetails({proAnnualProductId});
       if (response.error != null) {
-        _error = 'Abonelik bilgisi mağazadan alınamadı.';
+        _error = _message('Abonelik bilgisi mağazadan alınamadı.',
+            'Subscription information could not be retrieved from the store.');
         return;
       }
       if (response.productDetails.isEmpty) {
         _error = defaultTargetPlatform == TargetPlatform.iOS
-            ? 'DOQR Pro, App Store üzerinde yakında açılacak.'
-            : 'DOQR Pro ürünü Google Play üzerinde henüz etkin değil.';
+            ? _message('DOQR Pro, App Store üzerinde yakında açılacak.',
+                'DOQR Pro will be available on the App Store soon.')
+            : _message('DOQR Pro ürünü Google Play üzerinde henüz etkin değil.',
+                'DOQR Pro is not active on Google Play yet.');
         return;
       }
       _product = response.productDetails.first;
     } catch (_) {
-      _error = 'Mağaza bağlantısı kurulamadı.';
+      _error = _message(
+          'Mağaza bağlantısı kurulamadı.', 'Could not connect to the store.');
     } finally {
       _loading = false;
       notifyListeners();
@@ -91,7 +107,8 @@ class StorePurchaseService extends ChangeNotifier {
     _entitlementActivated = false;
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null || user.isAnonymous) {
-      _error = 'Satın almak için host hesabıyla giriş yapın.';
+      _error = _message('Satın almak için host hesabıyla giriş yapın.',
+          'Sign in with a host account to make a purchase.');
       notifyListeners();
       return;
     }
@@ -103,17 +120,19 @@ class StorePurchaseService extends ChangeNotifier {
       final started = await _store.buyNonConsumable(
         purchaseParam: PurchaseParam(
           productDetails: _product!,
-          applicationUserName: _accountHash(user.id),
+          applicationUserName: _storeAccountIdentifier(user.id),
         ),
       );
       if (!started) {
         _processing = false;
-        _error = 'Satın alma ekranı açılamadı.';
+        _error = _message('Satın alma ekranı açılamadı.',
+            'The purchase screen could not be opened.');
         notifyListeners();
       }
     } catch (_) {
       _processing = false;
-      _error = 'Satın alma başlatılamadı.';
+      _error = _message(
+          'Satın alma başlatılamadı.', 'The purchase could not be started.');
       notifyListeners();
     }
   }
@@ -121,7 +140,8 @@ class StorePurchaseService extends ChangeNotifier {
   Future<void> restorePurchases() async {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null || user.isAnonymous) {
-      _error = 'Geri yüklemek için host hesabıyla giriş yapın.';
+      _error = _message('Geri yüklemek için host hesabıyla giriş yapın.',
+          'Sign in with a host account to restore purchases.');
       notifyListeners();
       return;
     }
@@ -129,10 +149,13 @@ class StorePurchaseService extends ChangeNotifier {
     _error = null;
     notifyListeners();
     try {
-      await _store.restorePurchases(applicationUserName: _accountHash(user.id));
+      await _store.restorePurchases(
+        applicationUserName: _storeAccountIdentifier(user.id),
+      );
     } catch (_) {
       _processing = false;
-      _error = 'Satın almalar geri yüklenemedi.';
+      _error = _message('Satın almalar geri yüklenemedi.',
+          'Purchases could not be restored.');
       notifyListeners();
     }
   }
@@ -148,7 +171,9 @@ class StorePurchaseService extends ChangeNotifier {
       }
       if (purchase.status == PurchaseStatus.error) {
         _processing = false;
-        _error = purchase.error?.message ?? 'Satın alma tamamlanamadı.';
+        _error = purchase.error?.message ??
+            _message('Satın alma tamamlanamadı.',
+                'The purchase could not be completed.');
         notifyListeners();
         continue;
       }
@@ -179,8 +204,8 @@ class StorePurchaseService extends ChangeNotifier {
         _entitlementActivated = true;
         notifyListeners();
       } catch (error) {
-        // Do not acknowledge an unverified purchase. Google Play will redeliver
-        // it so the server verification can be retried without losing payment.
+        // Do not finish an unverified transaction. The store will redeliver it
+        // so server verification can be retried without losing the purchase.
         _processing = false;
         _error = _friendlyError(error);
         notifyListeners();
@@ -188,18 +213,28 @@ class StorePurchaseService extends ChangeNotifier {
     }
   }
 
-  String _accountHash(String userId) =>
-      sha256.convert(utf8.encode(userId)).toString();
+  String _storeAccountIdentifier(String userId) {
+    // StoreKit 2 only accepts a UUID for appAccountToken. Supabase user IDs are
+    // UUIDs already, so Apple can return the same privacy-safe identifier in
+    // signed transactions and server notifications. Google Play expects an
+    // obfuscated account ID and therefore keeps the SHA-256 representation.
+    if (defaultTargetPlatform == TargetPlatform.iOS) return userId;
+    return sha256.convert(utf8.encode(userId)).toString();
+  }
 
   String _friendlyError(Object error) {
     final text = error.toString();
     if (text.contains('ACCOUNT_MISMATCH') || text.contains('ait değil')) {
-      return 'Bu satın alma farklı bir DOQR hesabına bağlı.';
+      return _message('Bu satın alma farklı bir DOQR hesabına bağlı.',
+          'This purchase is linked to a different DOQR account.');
     }
     if (text.contains('STORE_NOT_READY')) {
-      return 'Bu mağazada DOQR Pro henüz etkin değil.';
+      return _message('Bu mağazada DOQR Pro henüz etkin değil.',
+          'DOQR Pro is not active in this store yet.');
     }
-    return 'Ödeme doğrulanamadı. Ücret alındıysa “Satın almayı geri yükle” ile tekrar deneyin.';
+    return _message(
+        'Ödeme doğrulanamadı. Ücret alındıysa “Satın almayı geri yükle” ile tekrar deneyin.',
+        'Payment could not be verified. If you were charged, try again with “Restore purchases”.');
   }
 
   @visibleForTesting
