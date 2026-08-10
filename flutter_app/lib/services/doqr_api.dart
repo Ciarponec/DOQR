@@ -47,6 +47,11 @@ class DoqrApi {
     return Map<String, dynamic>.from(response.data as Map);
   }
 
+  Future<void> deleteAccount() async {
+    final response = await client.functions.invoke('account-delete', body: {});
+    if (response.status != 200) _throw(response);
+  }
+
   Future<DoorListResult> listDoors() async {
     final response =
         await client.functions.invoke('door-list', method: HttpMethod.get);

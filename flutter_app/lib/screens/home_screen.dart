@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../models/door_item.dart';
 import '../models/ring_item.dart';
@@ -17,6 +18,8 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
+  static final _privacyUrl =
+      Uri.parse('https://ciarponec.github.io/DOQR/privacy.html');
   late Future<_HomeData> _future;
 
   @override
@@ -44,10 +47,105 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     await next;
   }
 
+  Future<void> _deleteAccount() async {
+    var accepted = false;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          icon: const Icon(Icons.delete_forever_rounded,
+              color: Color(0xFFE54867), size: 36),
+          title: const Text('DOQR hesabını sil?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Dijital zillerin, QR bağlantıların, ziyaret geçmişin ve hesapla ilişkili verilerin kalıcı olarak silinir. Bu işlem geri alınamaz. Mağaza aboneliğin varsa ayrıca Google Play veya App Store’dan iptal etmelisin.',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 14),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                value: accepted,
+                onChanged: (value) =>
+                    setDialogState(() => accepted = value == true),
+                title: const Text('Kalıcı silme işlemini anlıyorum.'),
+                controlAffinity: ListTileControlAffinity.leading,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Vazgeç'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFFE54867)),
+              onPressed:
+                  accepted ? () => Navigator.pop(dialogContext, true) : null,
+              child: const Text('Hesabımı kalıcı olarak sil'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+    try {
+      await ref.read(doqrApiProvider).deleteAccount();
+      await NotificationService.instance.stopForLogout();
+      await Supabase.instance.client.auth.signOut(scope: SignOutScope.local);
+      if (!mounted) return;
+      Navigator.of(context).pushNamedAndRemoveUntil('/', (_) => false);
+    } catch (_) {
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Hesap silinemedi. Lütfen tekrar dene.'),
+      ));
+    }
+  }
+
   @override
   Widget build(BuildContext context) => AppShell(
         title: 'DOQR',
         actions: [
+          PopupMenuButton<String>(
+            tooltip: 'Hesap ve gizlilik',
+            onSelected: (value) async {
+              if (value == 'privacy') {
+                await launchUrl(_privacyUrl,
+                    mode: LaunchMode.externalApplication);
+              } else if (value == 'delete') {
+                await _deleteAccount();
+              }
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(
+                value: 'privacy',
+                child: ListTile(
+                  leading: Icon(Icons.privacy_tip_outlined),
+                  title: Text('Gizlilik politikası'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              PopupMenuItem(
+                value: 'delete',
+                child: ListTile(
+                  leading: Icon(Icons.delete_forever_outlined,
+                      color: Color(0xFFE54867)),
+                  title: Text('Hesabımı sil'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ],
+          ),
           IconButton(
             tooltip: 'Çıkış yap',
             onPressed: () async {
