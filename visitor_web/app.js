@@ -10,6 +10,7 @@ let ring;
 let channel;
 let peer;
 let localStream;
+let remoteStream;
 let visitorKind = 'guest';
 let requestedMode = 'text';
 let captchaToken = null;
@@ -17,12 +18,9 @@ let muted = false;
 let cameraEnabled = true;
 let remoteDescriptionSet = false;
 let offerHandling = false;
-let mediaReadyTimer;
-let mediaReadyStopTimer;
 let mediaDeadlineTimer;
 let mediaCountdownTimer;
 let mediaLimitEnding = false;
-const pendingHostCandidates = [];
 const seenMessages = new Set();
 
 function show(id) {
@@ -206,13 +204,11 @@ async function startSession() {
     throw new Error('Güvenli ziyaretçi oturumu doğrulanamadı. Sayfayı yenileyip tekrar deneyin.');
   }
   await supabase.realtime.setAuth(sessionData.session.access_token);
-  channel = supabase.channel(`ring:${ring.ring_id}`, {config: {private: true, broadcast: {ack: true}}});
+  channel = supabase.channel(`visitor-ring:${ring.ring_id}`);
   await new Promise((resolve, reject) => channel
-    .on('broadcast', {event: 'chat_message'}, ({payload}) => appendMessage(payload))
-    .on('broadcast', {event: 'webrtc_offer'}, ({payload}) => handleOffer(payload))
-    .on('broadcast', {event: 'webrtc_ice'}, ({payload}) => handleIce(payload))
-    .on('broadcast', {event: 'webrtc_hangup'}, () => closeMedia(false))
+    .on('postgres_changes', {event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `ring_id=eq.${ring.ring_id}`}, ({new: value}) => appendMessage(value))
     .on('postgres_changes', {event: 'UPDATE', schema: 'public', table: 'rings', filter: `id=eq.${ring.ring_id}`}, ({new: value}) => updateRingState(value))
+    .on('postgres_changes', {event: '*', schema: 'public', table: 'webrtc_signals', filter: `ring_id=eq.${ring.ring_id}`}, ({new: value}) => handleSignal(value))
     .subscribe((status, error) => {
       $('onlineDot').classList.toggle('offline', status !== 'SUBSCRIBED');
       if (status === 'SUBSCRIBED') resolve();
@@ -220,14 +216,8 @@ async function startSession() {
     }));
   const {data: history} = await supabase.from('chat_messages').select('id, sender_type, message_text, created_at').eq('ring_id', ring.ring_id).order('created_at');
   (history || []).forEach(appendMessage);
-  startMediaReadyLoop();
-}
-
-function mediaConstraints() {
-  return {
-    audio: {echoCancellation:true,noiseSuppression:true,autoGainControl:true},
-    video: requestedMode === 'video' ? {facingMode:'user',width:{ideal:1280},height:{ideal:720}} : false,
-  };
+  const {data: signal} = await supabase.from('webrtc_signals').select('ring_id, offer_type, offer_sdp, answer_type, answer_sdp').eq('ring_id', ring.ring_id).maybeSingle();
+  if (signal) await handleSignal(signal);
 }
 
 async function prepareLocalMedia() {
@@ -236,10 +226,43 @@ async function prepareLocalMedia() {
     throw new Error('Bu tarayıcı sesli veya görüntülü görüşmeyi desteklemiyor.');
   }
   try {
-    localStream = await navigator.mediaDevices.getUserMedia(mediaConstraints());
+    if (requestedMode === 'video') {
+      // Safari/iOS may collapse a combined prompt into microphone-only. Ask
+      // for the camera first and verify that a real video track was granted.
+      const cameraStream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: {facingMode:'user',width:{ideal:1280},height:{ideal:720}},
+      });
+      if (!cameraStream.getVideoTracks().length) {
+        cameraStream.getTracks().forEach((track) => track.stop());
+        throw new Error('Kamera akışı alınamadı. Safari ayarlarından kamera iznini açın.');
+      }
+      try {
+        const microphoneStream = await navigator.mediaDevices.getUserMedia({
+          audio: {echoCancellation:true,noiseSuppression:true,autoGainControl:true},
+          video: false,
+        });
+        if (!microphoneStream.getAudioTracks().length) {
+          throw new Error('Mikrofon akışı alınamadı.');
+        }
+        localStream = new MediaStream([
+          ...cameraStream.getVideoTracks(),
+          ...microphoneStream.getAudioTracks(),
+        ]);
+      } catch (error) {
+        cameraStream.getTracks().forEach((track) => track.stop());
+        throw error;
+      }
+    } else {
+      localStream = await navigator.mediaDevices.getUserMedia({
+        audio: {echoCancellation:true,noiseSuppression:true,autoGainControl:true},
+        video: false,
+      });
+    }
     return localStream;
-  } catch (_) {
-    const devices = requestedMode === 'video' ? 'kamera ve mikrofon' : 'mikrofon';
+  } catch (error) {
+    if (error?.message?.includes('akışı alınamadı')) throw error;
+    const devices = requestedMode === 'video' ? 'önce kamera, ardından mikrofon' : 'mikrofon';
     throw new Error(`Görüşme için ${devices} izni gerekiyor.`);
   }
 }
@@ -256,34 +279,20 @@ function updateRingState(value) {
   $('sessionEyebrow').textContent = accepted ? 'Bağlandı' : 'Zil durumu';
   $('sessionTitle').textContent = accepted ? (requestedMode === 'text' ? 'Host yanıtladı' : 'Görüşme başlıyor') : ({declined:'Host şu anda müsait değil', missed:'Zil cevapsız kaldı', cancelled:'Ziyaret iptal edildi', ended:'Görüşme sona erdi'}[value.status] || 'Host bekleniyor');
   $('sessionSubtitle').textContent = accepted ? 'Güvenli oturum aktif.' : 'Bu sayfayı açık tutabilirsiniz.';
-  if (accepted) startMediaReadyLoop();
+  if (accepted) void loadPersistentOffer();
   if (['declined','missed','cancelled','ended'].includes(value.status)) {
     $('cancelBtn').classList.add('hidden');
     closeMedia(false);
   }
 }
 
-async function announceMediaReady() {
-  if (!channel || remoteDescriptionSet || !['audio','video'].includes(requestedMode)) return;
-  await channel.send({
-    type: 'broadcast',
-    event: 'webrtc_ready',
-    payload: {from: 'visitor', requested_mode: requestedMode},
-  });
-}
-
-function startMediaReadyLoop() {
-  if (mediaReadyTimer || remoteDescriptionSet || !['audio','video'].includes(requestedMode)) return;
-  void announceMediaReady();
-  mediaReadyTimer = setInterval(() => void announceMediaReady(), 1500);
-  mediaReadyStopTimer = setTimeout(stopMediaReadyLoop, 15000);
-}
-
-function stopMediaReadyLoop() {
-  clearInterval(mediaReadyTimer);
-  clearTimeout(mediaReadyStopTimer);
-  mediaReadyTimer = undefined;
-  mediaReadyStopTimer = undefined;
+async function loadPersistentOffer() {
+  if (remoteDescriptionSet || !ring || !['audio','video'].includes(requestedMode)) return;
+  const {data, error} = await supabase.from('webrtc_signals')
+    .select('ring_id, offer_type, offer_sdp, answer_type, answer_sdp')
+    .eq('ring_id', ring.ring_id)
+    .maybeSingle();
+  if (!error && data) await handleSignal(data);
 }
 
 function appendMessage(message) {
@@ -317,18 +326,23 @@ async function ringAction(action) {
   try { await functionCall('ring-action', {ring_id: ring.ring_id, action}); } catch (error) { alert(error.message); }
 }
 
-async function handleOffer(offer) {
-  if (offerHandling || remoteDescriptionSet || offer.from !== 'host' || !offer.sdp || !['audio','video'].includes(requestedMode)) return;
+async function handleSignal(signal) {
+  if (offerHandling || remoteDescriptionSet || !signal?.offer_sdp || !['audio','video'].includes(requestedMode)) return;
   offerHandling = true;
   try {
     if (!peer) await createMediaPeer();
-    await peer.setRemoteDescription({type: offer.type || 'offer', sdp: offer.sdp});
+    await peer.setRemoteDescription({type: signal.offer_type || 'offer', sdp: signal.offer_sdp});
     remoteDescriptionSet = true;
-    stopMediaReadyLoop();
-    for (const candidate of pendingHostCandidates.splice(0)) await peer.addIceCandidate(candidate);
     const answer = await peer.createAnswer();
     await peer.setLocalDescription(answer);
-    await channel.send({type: 'broadcast', event: 'webrtc_answer', payload: {from:'visitor', type:answer.type, sdp:answer.sdp}});
+    await waitForIceGathering(peer);
+    const completeAnswer = peer.localDescription;
+    const {error} = await supabase.from('webrtc_signals').update({
+      answer_type: completeAnswer.type || 'answer',
+      answer_sdp: completeAnswer.sdp,
+      answer_created_at: new Date().toISOString(),
+    }).eq('ring_id', ring.ring_id);
+    if (error) throw error;
   } catch (error) {
     $('connectionLabel').textContent = 'Medya izni veya bağlantı kurulamadı';
   } finally {
@@ -340,10 +354,11 @@ async function createMediaPeer() {
   const rtc = await functionCall('rtc-config', {ring_id: ring.ring_id});
   scheduleMediaDeadline(rtc.media_deadline);
   peer = new RTCPeerConnection({iceServers: rtc.ice_servers});
-  peer.onicecandidate = ({candidate}) => {
-    if (candidate) channel.send({type:'broadcast', event:'webrtc_ice', payload:{from:'visitor', ...candidate.toJSON()}});
+  peer.ontrack = ({track, streams}) => {
+    remoteStream = streams[0] || remoteStream || new MediaStream();
+    if (!streams[0] && !remoteStream.getTracks().some((item) => item.id === track.id)) remoteStream.addTrack(track);
+    $('remoteVideo').srcObject = remoteStream;
   };
-  peer.ontrack = ({streams}) => { $('remoteVideo').srcObject = streams[0]; };
   peer.onconnectionstatechange = () => { $('connectionLabel').textContent = peer.connectionState === 'connected' ? 'Bağlandı' : 'Bağlanıyor…'; };
   await prepareLocalMedia();
   localStream.getTracks().forEach((track) => peer.addTrack(track, localStream));
@@ -353,6 +368,22 @@ async function createMediaPeer() {
   $('remoteVideo').classList.toggle('hidden', requestedMode !== 'video');
   $('localVideo').classList.toggle('hidden', requestedMode !== 'video');
   $('cameraBtn').classList.toggle('hidden', requestedMode !== 'video');
+}
+
+function waitForIceGathering(connection, timeoutMs = 10000) {
+  if (connection.iceGatheringState === 'complete') return Promise.resolve();
+  return new Promise((resolve) => {
+    const done = () => {
+      connection.removeEventListener('icegatheringstatechange', changed);
+      clearTimeout(timer);
+      resolve();
+    };
+    const changed = () => {
+      if (connection.iceGatheringState === 'complete') done();
+    };
+    const timer = setTimeout(done, timeoutMs);
+    connection.addEventListener('icegatheringstatechange', changed);
+  });
 }
 
 function scheduleMediaDeadline(value) {
@@ -388,29 +419,17 @@ async function expireVideoSession() {
   await ringAction('end');
 }
 
-async function handleIce(candidate) {
-  if (candidate.from !== 'host' || !candidate.candidate) return;
-  const ice = {candidate:candidate.candidate,sdpMid:candidate.sdpMid,sdpMLineIndex:candidate.sdpMLineIndex};
-  if (!peer || !remoteDescriptionSet) {
-    pendingHostCandidates.push(ice);
-    return;
-  }
-  await peer.addIceCandidate(ice);
-}
-
 $('muteBtn').addEventListener('click', () => { muted = !muted; localStream?.getAudioTracks().forEach((track) => track.enabled = !muted); $('muteBtn').textContent = muted ? '×' : '🎙'; });
 $('cameraBtn').addEventListener('click', () => { cameraEnabled = !cameraEnabled; localStream?.getVideoTracks().forEach((track) => track.enabled = cameraEnabled); $('cameraBtn').textContent = cameraEnabled ? '▣' : '×'; });
 async function closeMedia(notify = true) {
-  stopMediaReadyLoop();
   clearMediaDeadline();
-  if (notify && channel) await channel.send({type:'broadcast',event:'webrtc_hangup',payload:{from:'visitor'}});
   releaseLocalMedia();
   peer?.close(); peer = null;
+  remoteStream = null;
   remoteDescriptionSet = false;
   offerHandling = false;
-  pendingHostCandidates.splice(0);
   $('mediaCard').classList.add('hidden');
 }
 
-addEventListener('beforeunload', () => { stopMediaReadyLoop(); localStream?.getTracks().forEach((track) => track.stop()); peer?.close(); });
+addEventListener('beforeunload', () => { localStream?.getTracks().forEach((track) => track.stop()); peer?.close(); });
 bootstrap();

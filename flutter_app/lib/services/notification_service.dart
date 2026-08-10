@@ -5,6 +5,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'doqr_api.dart';
 
@@ -25,8 +26,10 @@ class NotificationService {
   StreamSubscription<String>? _tokenSubscription;
   StreamSubscription<RemoteMessage>? _foregroundSubscription;
   StreamSubscription<RemoteMessage>? _openedSubscription;
+  RealtimeChannel? _foregroundRingChannel;
   String? _currentToken;
   DoqrApi? _api;
+  String? _visibleRingId;
 
   bool get isConfigured =>
       !kIsWeb &&
@@ -68,6 +71,20 @@ class NotificationService {
   Future<void> startForUser(DoqrApi api, Locale locale) async {
     if (!isConfigured) return;
     _api = api;
+    await _foregroundRingChannel?.unsubscribe();
+    _foregroundRingChannel = api.client
+        .channel('foreground-rings:${api.client.auth.currentUser?.id}')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'rings',
+          filter: const PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'status',
+            value: 'pending',
+          ),
+          callback: (payload) => _openRing(payload.newRecord['id']?.toString()),
+        )..subscribe();
     await FirebaseMessaging.instance.requestPermission(
         alert: true, badge: true, sound: true, provisional: false);
     _currentToken = await _getTokenWhenReady();
@@ -104,6 +121,7 @@ class NotificationService {
         ),
         payload: message.data['ring_id'],
       );
+      _openRing(message.data['ring_id']);
     });
     await _openedSubscription?.cancel();
     _openedSubscription = FirebaseMessaging.onMessageOpenedApp
@@ -125,6 +143,8 @@ class NotificationService {
     await _tokenSubscription?.cancel();
     await _foregroundSubscription?.cancel();
     await _openedSubscription?.cancel();
+    await _foregroundRingChannel?.unsubscribe();
+    _foregroundRingChannel = null;
   }
 
   Future<String?> _getTokenWhenReady() async {
@@ -144,7 +164,11 @@ class NotificationService {
       _pendingRingId = ringId;
       return;
     }
+    if (_visibleRingId == ringId) return;
     _pendingRingId = null;
-    navigator.pushNamed('/ring', arguments: ringId);
+    _visibleRingId = ringId;
+    navigator
+        .pushNamed('/ring', arguments: ringId)
+        .whenComplete(() => _visibleRingId = null);
   }
 }

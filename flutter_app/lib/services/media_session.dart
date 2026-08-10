@@ -30,11 +30,8 @@ class MediaSessionController extends ChangeNotifier {
   final remoteRenderer = RTCVideoRenderer();
   RTCPeerConnection? _peer;
   MediaStream? _localStream;
-  RealtimeChannel? _channel;
-  RTCSessionDescription? _localOffer;
-  final List<RTCIceCandidate> _pendingRemoteCandidates = [];
+  StreamSubscription<List<Map<String, dynamic>>>? _signalSubscription;
   bool _remoteDescriptionSet = false;
-  bool _offerSending = false;
   bool _started = false;
   bool _muted = false;
   bool _cameraEnabled = true;
@@ -85,39 +82,20 @@ class MediaSessionController extends ChangeNotifier {
         _notify();
       };
       _peer!.onTrack = (event) {
-        if (event.streams.isNotEmpty) {
+        if (!_disposed && event.streams.isNotEmpty) {
           remoteRenderer.srcObject = event.streams.first;
         }
         _notify();
       };
 
-      final subscribed = Completer<void>();
-      _channel = client
-          .channel('ring:$ringId',
-              opts: const RealtimeChannelConfig(private: true, ack: true))
-          .onBroadcast(event: 'webrtc_answer', callback: _onAnswer)
-          .onBroadcast(event: 'webrtc_ready', callback: _onVisitorReady)
-          .onBroadcast(event: 'webrtc_ice', callback: _onIce)
-          .onBroadcast(
-              event: 'webrtc_hangup',
-              callback: (_) => close(notifyPeer: false));
-      _channel!.subscribe((status, error) {
-        if (status == RealtimeSubscribeStatus.subscribed &&
-            !subscribed.isCompleted) {
-          subscribed.complete();
-        } else if ((status == RealtimeSubscribeStatus.channelError ||
-                status == RealtimeSubscribeStatus.timedOut) &&
-            !subscribed.isCompleted) {
-          subscribed.completeError(
-              error ?? StateError('Realtime kanalına bağlanılamadı.'));
-        }
-      });
-      await subscribed.future.timeout(const Duration(seconds: 12));
-
-      _peer!.onIceCandidate = (candidate) {
-        if (candidate.candidate == null) return;
-        unawaited(_sendIce(candidate));
-      };
+      _signalSubscription = client
+          .from('webrtc_signals')
+          .stream(primaryKey: ['ring_id'])
+          .eq('ring_id', ringId)
+          .listen(_onSignalRows, onError: (Object error) {
+            _error = 'Görüşme sinyali alınamadı. Lütfen tekrar deneyin.';
+            _notify();
+          });
 
       _localStream = await navigator.mediaDevices.getUserMedia({
         'audio': {
@@ -140,8 +118,16 @@ class MediaSessionController extends ChangeNotifier {
       final offer = await _peer!.createOffer(
           {'offerToReceiveAudio': true, 'offerToReceiveVideo': video});
       await _peer!.setLocalDescription(offer);
-      _localOffer = offer;
-      await _sendOffer();
+      await _waitForIceGathering(_peer!);
+      final completeOffer = await _peer!.getLocalDescription();
+      if (completeOffer?.sdp == null || completeOffer!.sdp!.isEmpty) {
+        throw StateError('WebRTC teklifi oluşturulamadı.');
+      }
+      await client.from('webrtc_signals').insert({
+        'ring_id': ringId,
+        'offer_type': completeOffer.type ?? 'offer',
+        'offer_sdp': completeOffer.sdp,
+      });
       _notify();
     } catch (exception) {
       _error = mediaSessionErrorMessage(exception);
@@ -182,99 +168,33 @@ class MediaSessionController extends ChangeNotifier {
     await onSessionLimitReached?.call();
   }
 
-  Map<String, dynamic> _body(Map<String, dynamic> payload) {
-    final nested = payload['payload'];
-    return nested is Map ? Map<String, dynamic>.from(nested) : payload;
-  }
-
-  void _onAnswer(Map<String, dynamic> payload) {
-    final body = _body(payload);
-    if (_remoteDescriptionSet ||
-        body['from'] != 'visitor' ||
-        body['sdp'] is! String) {
-      return;
-    }
-    unawaited(_applyAnswer(body));
-  }
-
-  void _onVisitorReady(Map<String, dynamic> payload) {
-    final body = _body(payload);
-    if (body['from'] != 'visitor' ||
-        _localOffer == null ||
-        _remoteDescriptionSet ||
-        _closed) {
-      return;
-    }
-    unawaited(_sendOffer());
-  }
-
-  void _onIce(Map<String, dynamic> payload) {
-    final body = _body(payload);
-    if (body['from'] != 'visitor' || body['candidate'] is! String) return;
-    unawaited(_applyIce(body));
-  }
-
-  Future<void> _sendOffer() async {
-    final channel = _channel;
-    final offer = _localOffer;
-    if (channel == null ||
-        offer == null ||
-        _closed ||
-        _remoteDescriptionSet ||
-        _offerSending) {
-      return;
-    }
-    _offerSending = true;
-    try {
-      await channel.sendBroadcastMessage(event: 'webrtc_offer', payload: {
-        'from': 'host',
-        'sdp': offer.sdp,
-        'type': offer.type,
-        'video': video,
-      });
-    } finally {
-      _offerSending = false;
-    }
-  }
-
-  Future<void> _sendIce(RTCIceCandidate candidate) async {
-    final channel = _channel;
-    if (channel == null) return;
-    await channel.sendBroadcastMessage(event: 'webrtc_ice', payload: {
-      'from': 'host',
-      'candidate': candidate.candidate,
-      'sdpMid': candidate.sdpMid,
-      'sdpMLineIndex': candidate.sdpMLineIndex,
-    });
+  void _onSignalRows(List<Map<String, dynamic>> rows) {
+    if (_remoteDescriptionSet || _closed || rows.isEmpty) return;
+    final row = rows.first;
+    if (row['answer_sdp'] is! String) return;
+    unawaited(_applyAnswer(row));
   }
 
   Future<void> _applyAnswer(Map<String, dynamic> body) async {
     final peer = _peer;
     if (peer == null) return;
     await peer.setRemoteDescription(
-      RTCSessionDescription(
-          body['sdp'] as String, body['type'] as String? ?? 'answer'),
+      RTCSessionDescription(body['answer_sdp'] as String,
+          body['answer_type'] as String? ?? 'answer'),
     );
     _remoteDescriptionSet = true;
-    for (final candidate in _pendingRemoteCandidates) {
-      await peer.addCandidate(candidate);
-    }
-    _pendingRemoteCandidates.clear();
+    _notify();
   }
 
-  Future<void> _applyIce(Map<String, dynamic> body) async {
-    final peer = _peer;
-    if (peer == null) return;
-    final candidate = RTCIceCandidate(
-      body['candidate'] as String,
-      body['sdpMid'] as String?,
-      (body['sdpMLineIndex'] as num?)?.toInt(),
-    );
-    if (!_remoteDescriptionSet) {
-      _pendingRemoteCandidates.add(candidate);
-      return;
+  Future<void> _waitForIceGathering(RTCPeerConnection peer) async {
+    final deadline = DateTime.now().add(const Duration(seconds: 10));
+    while (!_closed && DateTime.now().isBefore(deadline)) {
+      final state = await peer.getIceGatheringState();
+      if (state == RTCIceGatheringState.RTCIceGatheringStateComplete) {
+        return;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 100));
     }
-    await peer.addCandidate(candidate);
   }
 
   void toggleMute() {
@@ -300,28 +220,25 @@ class MediaSessionController extends ChangeNotifier {
     _closed = true;
     _deadlineTimer?.cancel();
     _countdownTimer?.cancel();
-    if (notifyPeer) {
-      await _channel?.sendBroadcastMessage(
-          event: 'webrtc_hangup', payload: {'from': 'host'});
-    }
     for (final track in _localStream?.getTracks() ?? <MediaStreamTrack>[]) {
       track.stop();
     }
     await _localStream?.dispose();
     await _peer?.close();
-    await _channel?.unsubscribe();
-    localRenderer.srcObject = null;
-    remoteRenderer.srcObject = null;
+    await _signalSubscription?.cancel();
+    if (!_disposed) {
+      localRenderer.srcObject = null;
+      remoteRenderer.srcObject = null;
+    }
     _connected = false;
     _remoteDescriptionSet = false;
-    _localOffer = null;
-    _offerSending = false;
-    _pendingRemoteCandidates.clear();
     _notify();
   }
 
   @override
   void dispose() {
+    localRenderer.srcObject = null;
+    remoteRenderer.srcObject = null;
     _disposed = true;
     unawaited(close(notifyPeer: false));
     localRenderer.dispose();

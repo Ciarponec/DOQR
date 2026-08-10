@@ -51,7 +51,16 @@ class _RingSessionScreenState extends ConsumerState<RingSessionScreen> {
   }
 
   void _ensureMedia(RingItem item) {
-    if (item.status != 'accepted' || !item.usesMedia || media != null) return;
+    if (item.status != 'accepted' || !item.usesMedia) {
+      final current = media;
+      if (current != null) {
+        current.removeListener(_mediaChanged);
+        media = null;
+        current.dispose();
+      }
+      return;
+    }
+    if (media != null) return;
     media = MediaSessionController(
       client: ref.read(supabaseProvider),
       api: ref.read(doqrApiProvider),
@@ -391,7 +400,7 @@ class _SessionHero extends StatelessWidget {
         _ => 'Yazılı görüşme'
       };
   String _statusLabel(String status) => switch (status) {
-        'pending' => 'Yanıtınızı bekliyor',
+        'pending' => 'Zil çalıyor…',
         'accepted' => 'Görüşme aktif',
         'declined' => 'Reddedildi',
         'missed' => 'Cevapsız ziyaret',
