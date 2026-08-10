@@ -29,7 +29,10 @@ workflows:
       - name: Flutter analyze
         script: |
           cd flutter_app
-          flutter analyze
+          # Analyze only project sources. Codemagic's signing step creates
+          # generated Swift Package sources under build/, which are not part
+          # of DOQR and can contain unresolved example/test dependencies.
+          flutter analyze lib test
       - name: Flutter unit tests
         script: |
           cd flutter_app
