@@ -7,6 +7,7 @@ import '../models/ring_item.dart';
 import '../services/notification_service.dart';
 import '../services/providers.dart';
 import '../widgets/app_shell.dart';
+import 'plans_screen.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -74,7 +75,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 children: [
-                  _PlanHeader(plan: data.doors.accountPlan),
+                  _PlanHeader(
+                    plan: data.doors.accountPlan,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(
+                        builder: (_) => PlansScreen(
+                          currentPlan: data.doors.accountPlan,
+                        ),
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 16),
                   FilledButton.icon(
                     onPressed: () async {
@@ -142,11 +153,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
 class _PlanHeader extends StatelessWidget {
   final PlanItem plan;
-  const _PlanHeader({required this.plan});
+  final VoidCallback onTap;
+
+  const _PlanHeader({required this.plan, required this.onTap});
 
   @override
   Widget build(BuildContext context) => ElevCard(
+        onTap: onTap,
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
               width: 48,
@@ -166,21 +181,39 @@ class _PlanHeader extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('${plan.displayName} plan',
+                  Text(
+                      plan.isTrial
+                          ? 'Mevcut planın: Pro Deneme'
+                          : 'Mevcut planın: ${plan.displayName}',
                       style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 3),
                   Text(
                     plan.isTrial
-                        ? '3 günlük Pro denemesi • ses, görüntü ve kurye notları açık'
+                        ? '3 günlük Pro denemen aktif. Süre sona erdiğinde hesabın otomatik olarak Free plana geçecek.'
                         : plan.isPro
-                            ? 'Ses, görüntü, kurye notları ve 90 günlük geçmiş'
-                            : 'FCM + yazı ücretsiz • Pro yıllık \$9.99: ses, video ve 90 gün',
+                            ? 'Pro özelliklerin aktif • yıllık \$14.99'
+                            : 'Free planın aktif • Pro yıllık \$14.99',
                     style: Theme.of(context)
                         .textTheme
                         .bodySmall
                         ?.copyWith(color: const Color(0xFF64748B)),
                   ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Free ve Pro planları karşılaştır',
+                    style: TextStyle(
+                      color: Color(0xFF2F6BFF),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
                 ],
               ),
+            ),
+            const Padding(
+              padding: EdgeInsets.only(top: 11),
+              child:
+                  Icon(Icons.chevron_right_rounded, color: Color(0xFF667085)),
             ),
           ],
         ),

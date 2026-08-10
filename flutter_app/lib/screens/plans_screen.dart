@@ -1,0 +1,243 @@
+import 'package:flutter/material.dart';
+
+import '../models/door_item.dart';
+import '../models/plan_catalog.dart';
+import '../ui/app_theme.dart';
+import '../widgets/app_shell.dart';
+
+class PlansScreen extends StatelessWidget {
+  final PlanItem currentPlan;
+
+  const PlansScreen({super.key, required this.currentPlan});
+
+  @override
+  Widget build(BuildContext context) => AppShell(
+        title: 'Planlar',
+        child: ListView(
+          children: [
+            _CurrentPlanCard(plan: currentPlan),
+            const SizedBox(height: 22),
+            const SectionLabel('Planları karşılaştır'),
+            const _PlanCard(
+              title: 'Free',
+              price: r'$0',
+              subtitle: 'Dijital zilin temel özellikleri ücretsiz.',
+              icon: Icons.qr_code_2_rounded,
+              accent: AppColors.blue,
+              features: PlanCatalog.freeFeatures,
+            ),
+            const SizedBox(height: 14),
+            const _PlanCard(
+              title: 'Pro',
+              price: PlanCatalog.proAnnualPriceLabel,
+              subtitle: 'Daha fazla kapı, geçmiş ve gerçek zamanlı görüşme.',
+              icon: Icons.workspace_premium_rounded,
+              accent: AppColors.warning,
+              features: PlanCatalog.proFeatures,
+              highlighted: true,
+            ),
+            const SizedBox(height: 18),
+            FilledButton.icon(
+              onPressed: currentPlan.isPro && !currentPlan.isTrial
+                  ? null
+                  : () => _showPurchaseInfo(context),
+              icon: const Icon(Icons.workspace_premium_rounded),
+              label: Text(currentPlan.isPro && !currentPlan.isTrial
+                  ? 'Pro planın aktif'
+                  : "Pro'yu Satın Al • ${PlanCatalog.proAnnualPriceLabel}"),
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'Abonelik yıllık yenilenir. Satın alma onayından önce mağaza koşulları ve toplam tutar gösterilir.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AppColors.muted, fontSize: 11),
+            ),
+          ],
+        ),
+      );
+
+  Future<void> _showPurchaseInfo(BuildContext context) => showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          icon: const Icon(Icons.shopping_bag_outlined,
+              color: AppColors.blue, size: 34),
+          title: const Text("Pro'yu Satın Al"),
+          content: const Text(
+            'DOQR Pro yıllık \$14.99 olacak. Güvenli App Store ve Google Play ödeme bağlantısı tamamlandığında satın alma bu ekrandan açılacak.',
+            textAlign: TextAlign.center,
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Anladım'),
+            ),
+          ],
+          actionsAlignment: MainAxisAlignment.center,
+        ),
+      );
+}
+
+class _CurrentPlanCard extends StatelessWidget {
+  final PlanItem plan;
+
+  const _CurrentPlanCard({required this.plan});
+
+  String get title {
+    if (plan.isTrial) return 'Mevcut planın: Pro Deneme';
+    if (plan.isPro) return 'Mevcut planın: Pro';
+    return 'Mevcut planın: Free';
+  }
+
+  String get description {
+    if (plan.isTrial) {
+      return '3 günlük Pro denemen devam ediyor. Deneme sona erdiğinde hesabın otomatik olarak Free plana geçecek.';
+    }
+    if (plan.isPro) {
+      return 'Pro özelliklerin aktif. Plan ücretin yıllık \$14.99.';
+    }
+    return "Free planın aktif. Dilediğin zaman yıllık \$14.99 karşılığında Pro'ya geçebilirsin.";
+  }
+
+  @override
+  Widget build(BuildContext context) => ElevCard(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppColors.navy, Color(0xFF253D88)],
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 50,
+              height: 50,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: const Icon(Icons.workspace_premium_rounded,
+                  color: Colors.white),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleMedium
+                          ?.copyWith(color: Colors.white)),
+                  const SizedBox(height: 5),
+                  Text(description,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Colors.white.withValues(alpha: 0.78))),
+                  if (plan.isTrial) ...[
+                    const SizedBox(height: 10),
+                    const Text(
+                      'Deneme hakkı: 30 dk ses • 15 dk görüntü',
+                      style: TextStyle(
+                          color: Color(0xFFB9F4FF),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+}
+
+class _PlanCard extends StatelessWidget {
+  final String title;
+  final String price;
+  final String subtitle;
+  final IconData icon;
+  final Color accent;
+  final List<PlanFeature> features;
+  final bool highlighted;
+
+  const _PlanCard({
+    required this.title,
+    required this.price,
+    required this.subtitle,
+    required this.icon,
+    required this.accent,
+    required this.features,
+    this.highlighted = false,
+  });
+
+  @override
+  Widget build(BuildContext context) => ElevCard(
+        color: highlighted ? const Color(0xFFFFFCF3) : Colors.white,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                SoftIcon(icon, color: accent),
+                const SizedBox(width: 13),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title,
+                          style: Theme.of(context).textTheme.titleLarge),
+                      Text(subtitle,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(color: AppColors.muted)),
+                    ],
+                  ),
+                ),
+                Text(price,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: highlighted ? AppColors.blue : AppColors.ink)),
+              ],
+            ),
+            const SizedBox(height: 18),
+            ...features.map((feature) => _FeatureRow(feature: feature)),
+          ],
+        ),
+      );
+}
+
+class _FeatureRow extends StatelessWidget {
+  final PlanFeature feature;
+
+  const _FeatureRow({required this.feature});
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(bottom: 14),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.only(top: 2),
+              child: Icon(Icons.check_circle_rounded,
+                  size: 20, color: AppColors.success),
+            ),
+            const SizedBox(width: 11),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(feature.title,
+                      style: const TextStyle(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 2),
+                  Text(feature.detail,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: AppColors.muted)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+}

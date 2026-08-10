@@ -25,7 +25,7 @@ flowchart LR
 
 ## Planlar
 
-Free planda zil ve FCM sayısı kısıtlanmaz; yazılı görüşme açıktır ve yalnızca en son üç ziyaret görünür/saklanır. Ses ile görüntü sunucu tarafında kapalıdır. İlk dijital zil oluşturulduğunda hesap başına tek seferlik üç günlük, özellik bakımından Pro denemesi başlar; deneme medya hakkı 30 dakika ses ve 15 dakika videodur. Pro plan yıllık $9.99, 90 günlük geçmiş, kurye notları, en fazla üç zil ve zil başına toplam üç host içerir. Medya adil kullanım değerleri veritabanından yönetilir.
+Free planda zil ve FCM sayısı kısıtlanmaz; yazılı görüşme açıktır ve yalnızca en son üç ziyaret görünür/saklanır. Ses ile görüntü sunucu tarafında kapalıdır. İlk dijital zil oluşturulduğunda hesap başına tek seferlik üç günlük, özellik bakımından Pro denemesi başlar; deneme medya hakkı 30 dakika ses ve 15 dakika videodur. Pro plan yıllık $14.99, 90 günlük geçmiş, kurye notları, en fazla üç zil ve zil başına toplam üç host içerir. Medya adil kullanım değerleri veritabanından yönetilir.
 
 Cloudflare TURN hesabının aylık egress kullanımı backend tarafından izlenir. 950 GB sert sınırında `rtc-config` kimlik üretmez, ziyaretçi medya seçenekleri kapanır ve dakikalık kontrol görevi aktif TURN kimliklerini iptal eder. Analitik okunamıyorsa maliyet güvenliği için sistem TURN tarafında kapalı davranır; yazılı zil çalışmaya devam eder.
 
