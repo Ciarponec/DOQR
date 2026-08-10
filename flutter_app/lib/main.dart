@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -18,9 +20,9 @@ Future<void> main() async {
   AppConfig.validate();
   await Supabase.initialize(
       url: AppConfig.supabaseUrl, publishableKey: AppConfig.supabaseKey);
-  await StorePurchaseService.instance.initialize();
-  await NotificationService.instance.initialize();
   runApp(const ProviderScope(child: DoqrApp()));
+  unawaited(StorePurchaseService.instance.initialize());
+  unawaited(NotificationService.instance.initialize());
 }
 
 class DoqrApp extends StatefulWidget {
