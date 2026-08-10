@@ -6,6 +6,8 @@ const DEFAULT_HARD_LIMIT_GB = 950;
 const DEFAULT_CACHE_SECONDS = 5 * 60;
 const MAX_STALE_SECONDS = 30 * 60;
 const DEFAULT_CREDENTIAL_TTL_SECONDS = 60;
+const MIN_CREDENTIAL_TTL_SECONDS = 5 * 60;
+const MAX_CREDENTIAL_TTL_SECONDS = 48 * 60 * 60;
 
 export type TurnServiceStatus = {
   enabled: boolean;
@@ -197,6 +199,24 @@ export function filterBrowserIceUrls(urls: string[]): string[] {
   );
 }
 
+export function resolveTurnCredentialTtl(
+  configuredTtlSeconds: number,
+  sessionRemainingSeconds?: number,
+): number {
+  const configured = Math.max(
+    MIN_CREDENTIAL_TTL_SECONDS,
+    Math.min(configuredTtlSeconds, MAX_CREDENTIAL_TTL_SECONDS),
+  );
+  if (sessionRemainingSeconds == null) return configured;
+
+  // The media deadline remains authoritative. TURN credentials need extra
+  // setup time because both peers request them after the call is accepted.
+  return Math.max(
+    MIN_CREDENTIAL_TTL_SECONDS,
+    Math.min(configured, sessionRemainingSeconds),
+  );
+}
+
 function sanitizeIceServers(value: unknown): IceServer[] {
   if (!Array.isArray(value)) return [];
   const result: IceServer[] = [];
@@ -237,16 +257,14 @@ export async function generateTurnIceServers(
   usernames: string[];
 }> {
   const { keyId, token } = requiredCloudflareTurnConfig();
-  const configuredTtlSeconds = Math.min(
-    positiveInteger(
-      Deno.env.get("TURN_CREDENTIAL_TTL_SECONDS"),
-      DEFAULT_CREDENTIAL_TTL_SECONDS,
-    ),
-    48 * 60 * 60,
+  const configuredTtlSeconds = positiveInteger(
+    Deno.env.get("TURN_CREDENTIAL_TTL_SECONDS"),
+    DEFAULT_CREDENTIAL_TTL_SECONDS,
   );
-  const ttlSeconds = maxTtlSeconds == null
-    ? configuredTtlSeconds
-    : Math.max(1, Math.min(configuredTtlSeconds, maxTtlSeconds));
+  const ttlSeconds = resolveTurnCredentialTtl(
+    configuredTtlSeconds,
+    maxTtlSeconds,
+  );
   const response = await fetch(
     `${CLOUDFLARE_TURN_URL}/${keyId}/credentials/generate-ice-servers`,
     {
@@ -260,6 +278,12 @@ export async function generateTurnIceServers(
     },
   );
   if (!response.ok) {
+    const providerDetails = (await response.text()).slice(0, 300);
+    console.error("Cloudflare TURN credential request rejected", {
+      status: response.status,
+      providerDetails,
+      ttlSeconds,
+    });
     throw new Error(
       `Cloudflare TURN credentials failed with ${response.status}`,
     );

@@ -25,8 +25,12 @@ class _DoorsManageScreenState extends ConsumerState<DoorsManageScreen> {
     _future = ref.read(doqrApiProvider).listDoors();
   }
 
-  void _reload() =>
-      setState(() => _future = ref.read(doqrApiProvider).listDoors());
+  void _reload() {
+    final next = ref.read(doqrApiProvider).listDoors();
+    setState(() {
+      _future = next;
+    });
+  }
 
   Future<void> _create(PlanItem plan) async {
     final label = TextEditingController();

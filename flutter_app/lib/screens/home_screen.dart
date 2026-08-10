@@ -36,8 +36,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Future<void> _refresh() async {
-    setState(() => _future = _load());
-    await _future;
+    final next = _load();
+    setState(() {
+      _future = next;
+    });
+    await next;
   }
 
   @override

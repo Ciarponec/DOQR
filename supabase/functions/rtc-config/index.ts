@@ -107,7 +107,17 @@ Deno.serve(async (req) => {
       credentialTtlLimit = remaining;
     }
 
-    const credentials = await generateTurnIceServers(credentialTtlLimit);
+    let credentials;
+    try {
+      credentials = await generateTurnIceServers(credentialTtlLimit);
+    } catch (error) {
+      console.error("TURN credential generation unavailable", error);
+      throw new HttpError(
+        503,
+        "Sesli ve görüntülü görüşme geçici olarak kullanılamıyor",
+        "TURN_UNAVAILABLE",
+      );
+    }
 
     return json(200, {
       ice_servers: credentials.iceServers,

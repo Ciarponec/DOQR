@@ -1,4 +1,8 @@
-import { filterBrowserIceUrls, utcMonthStart } from "./turn.ts";
+import {
+  filterBrowserIceUrls,
+  resolveTurnCredentialTtl,
+  utcMonthStart,
+} from "./turn.ts";
 
 function assertEquals(actual: unknown, expected: unknown) {
   if (JSON.stringify(actual) !== JSON.stringify(expected)) {
@@ -29,4 +33,11 @@ Deno.test("TURN browser URL filter removes alternate port 53", () => {
 Deno.test("TURN usage periods start on the first day in UTC", () => {
   assertEquals(utcMonthStart(new Date("2026-08-31T23:59:59Z")), "2026-08-01");
   assertEquals(utcMonthStart(new Date("2026-09-01T00:00:00Z")), "2026-09-01");
+});
+
+Deno.test("TURN credentials keep setup margin for one-minute calls", () => {
+  assertEquals(resolveTurnCredentialTtl(600, 43), 300);
+  assertEquals(resolveTurnCredentialTtl(600, 900), 600);
+  assertEquals(resolveTurnCredentialTtl(60), 300);
+  assertEquals(resolveTurnCredentialTtl(999999), 172800);
 });

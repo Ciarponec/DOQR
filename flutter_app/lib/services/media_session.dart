@@ -6,6 +6,19 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'doqr_api.dart';
 
+String mediaSessionErrorMessage(Object exception) {
+  if (exception is FunctionException) {
+    final details = exception.details;
+    if (details is Map && details['error'] is String) {
+      return details['error'] as String;
+    }
+    if (exception.status >= 500 || exception.status == 0) {
+      return 'Görüşme altyapısına şu anda ulaşılamıyor. Lütfen tekrar deneyin.';
+    }
+  }
+  return 'Görüşme başlatılamadı. Lütfen tekrar deneyin.';
+}
+
 class MediaSessionController extends ChangeNotifier {
   final SupabaseClient client;
   final DoqrApi api;
@@ -132,7 +145,7 @@ class MediaSessionController extends ChangeNotifier {
       });
       _notify();
     } catch (exception) {
-      _error = exception.toString();
+      _error = mediaSessionErrorMessage(exception);
       _notify();
     }
   }

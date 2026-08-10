@@ -20,11 +20,15 @@ class _CourierNotesScreenState extends ConsumerState<CourierNotesScreen> {
   @override
   void initState() {
     super.initState();
-    _reload();
+    _future = ref.read(doqrApiProvider).listCourierNotes(widget.door.id);
   }
 
-  void _reload() => setState(() =>
-      _future = ref.read(doqrApiProvider).listCourierNotes(widget.door.id));
+  void _reload() {
+    final next = ref.read(doqrApiProvider).listCourierNotes(widget.door.id);
+    setState(() {
+      _future = next;
+    });
+  }
 
   Future<void> _edit([CourierNoteItem? note]) async {
     final code =
