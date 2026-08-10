@@ -60,12 +60,16 @@ void main() {
 
     expect(find.text('Mevcut planın: Pro Deneme'), findsOneWidget);
     expect(find.text('Free'), findsOneWidget);
-
-    await tester.drag(find.byType(ListView), const Offset(0, -600));
-    await tester.pumpAndSettle();
-
     expect(find.text('Pro'), findsOneWidget);
     expect(find.textContaining(r'$14.99'), findsWidgets);
+    expect(
+      tester.getCenter(find.text('Free')).dx,
+      lessThan(tester.getCenter(find.text('Pro')).dx),
+    );
+    expect(
+      tester.getTopLeft(find.text('Free')).dy,
+      closeTo(tester.getTopLeft(find.text('Pro')).dy, 2),
+    );
     expect(tester.takeException(), isNull);
   });
 }

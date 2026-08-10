@@ -185,7 +185,10 @@ $('ringBtn').addEventListener('click', async () => {
     await startSession();
     show('sessionView');
   } catch (error) {
-    alert(error.message);
+    const unauthorized = /unauthorized|permissions to (read|write).*channel topic/i.test(error?.message || '');
+    alert(unauthorized
+      ? 'Güvenli iletişim kanalı kurulamadı. Sayfayı yenileyip tekrar deneyin.'
+      : error.message);
   } finally {
     $('ringBtn').disabled = false;
     $('ringBtn').textContent = 'Zili çal →';
@@ -193,6 +196,11 @@ $('ringBtn').addEventListener('click', async () => {
 });
 
 async function startSession() {
+  const {data: sessionData, error: sessionError} = await supabase.auth.getSession();
+  if (sessionError || !sessionData.session?.access_token) {
+    throw new Error('Güvenli ziyaretçi oturumu doğrulanamadı. Sayfayı yenileyip tekrar deneyin.');
+  }
+  await supabase.realtime.setAuth(sessionData.session.access_token);
   channel = supabase.channel(`ring:${ring.ring_id}`, {config: {private: true, broadcast: {ack: true}}});
   await new Promise((resolve, reject) => channel
     .on('broadcast', {event: 'chat_message'}, ({payload}) => appendMessage(payload))

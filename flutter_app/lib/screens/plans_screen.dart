@@ -18,24 +18,7 @@ class PlansScreen extends StatelessWidget {
             _CurrentPlanCard(plan: currentPlan),
             const SizedBox(height: 22),
             const SectionLabel('Planları karşılaştır'),
-            const _PlanCard(
-              title: 'Free',
-              price: r'$0',
-              subtitle: 'Dijital zilin temel özellikleri ücretsiz.',
-              icon: Icons.qr_code_2_rounded,
-              accent: AppColors.blue,
-              features: PlanCatalog.freeFeatures,
-            ),
-            const SizedBox(height: 14),
-            const _PlanCard(
-              title: 'Pro',
-              price: PlanCatalog.proAnnualPriceLabel,
-              subtitle: 'Daha fazla kapı, geçmiş ve gerçek zamanlı görüşme.',
-              icon: Icons.workspace_premium_rounded,
-              accent: AppColors.warning,
-              features: PlanCatalog.proFeatures,
-              highlighted: true,
-            ),
+            const _PlanColumns(),
             const SizedBox(height: 18),
             FilledButton.icon(
               onPressed: currentPlan.isPro && !currentPlan.isTrial
@@ -74,6 +57,48 @@ class PlansScreen extends StatelessWidget {
           ],
           actionsAlignment: MainAxisAlignment.center,
         ),
+      );
+}
+
+class _PlanColumns extends StatelessWidget {
+  const _PlanColumns();
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 620;
+          return IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: _PlanCard(
+                    title: 'Free',
+                    price: r'$0',
+                    subtitle: 'Temel dijital zil özellikleri.',
+                    icon: Icons.qr_code_2_rounded,
+                    accent: AppColors.blue,
+                    features: PlanCatalog.freeFeatures,
+                    compact: compact,
+                  ),
+                ),
+                SizedBox(width: compact ? 9 : 14),
+                Expanded(
+                  child: _PlanCard(
+                    title: 'Pro',
+                    price: PlanCatalog.proAnnualPriceLabel,
+                    subtitle: 'Görüşme, kurye ve uzun geçmiş.',
+                    icon: Icons.workspace_premium_rounded,
+                    accent: AppColors.warning,
+                    features: PlanCatalog.proFeatures,
+                    highlighted: true,
+                    compact: compact,
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
       );
 }
 
@@ -158,6 +183,7 @@ class _PlanCard extends StatelessWidget {
   final Color accent;
   final List<PlanFeature> features;
   final bool highlighted;
+  final bool compact;
 
   const _PlanCard({
     required this.title,
@@ -167,39 +193,40 @@ class _PlanCard extends StatelessWidget {
     required this.accent,
     required this.features,
     this.highlighted = false,
+    required this.compact,
   });
 
   @override
   Widget build(BuildContext context) => ElevCard(
         color: highlighted ? const Color(0xFFFFFCF3) : Colors.white,
+        padding: EdgeInsets.all(compact ? 12 : 18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                SoftIcon(icon, color: accent),
-                const SizedBox(width: 13),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(title,
-                          style: Theme.of(context).textTheme.titleLarge),
-                      Text(subtitle,
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodySmall
-                              ?.copyWith(color: AppColors.muted)),
-                    ],
-                  ),
-                ),
-                Text(price,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: highlighted ? AppColors.blue : AppColors.ink)),
-              ],
+            SoftIcon(icon, color: accent, size: compact ? 38 : 48),
+            SizedBox(height: compact ? 9 : 13),
+            Text(title,
+                style: compact
+                    ? Theme.of(context).textTheme.titleMedium
+                    : Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 2),
+            Text(
+              price,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: highlighted ? AppColors.blue : AppColors.ink),
             ),
-            const SizedBox(height: 18),
-            ...features.map((feature) => _FeatureRow(feature: feature)),
+            if (!compact) ...[
+              const SizedBox(height: 4),
+              Text(subtitle,
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: AppColors.muted)),
+            ],
+            SizedBox(height: compact ? 14 : 18),
+            ...features.map(
+              (feature) => _FeatureRow(feature: feature, compact: compact),
+            ),
           ],
         ),
       );
@@ -207,33 +234,39 @@ class _PlanCard extends StatelessWidget {
 
 class _FeatureRow extends StatelessWidget {
   final PlanFeature feature;
+  final bool compact;
 
-  const _FeatureRow({required this.feature});
+  const _FeatureRow({required this.feature, required this.compact});
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(bottom: 14),
+        padding: EdgeInsets.only(bottom: compact ? 11 : 14),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Padding(
-              padding: EdgeInsets.only(top: 2),
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
               child: Icon(Icons.check_circle_rounded,
-                  size: 20, color: AppColors.success),
+                  size: compact ? 16 : 20, color: AppColors.success),
             ),
-            const SizedBox(width: 11),
+            SizedBox(width: compact ? 6 : 11),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(feature.title,
-                      style: const TextStyle(fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 2),
-                  Text(feature.detail,
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodySmall
-                          ?.copyWith(color: AppColors.muted)),
+                      style: TextStyle(
+                          fontSize: compact ? 11 : 14,
+                          height: compact ? 1.3 : 1.5,
+                          fontWeight: FontWeight.w700)),
+                  if (!compact) ...[
+                    const SizedBox(height: 2),
+                    Text(feature.detail,
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(color: AppColors.muted)),
+                  ],
                 ],
               ),
             ),
