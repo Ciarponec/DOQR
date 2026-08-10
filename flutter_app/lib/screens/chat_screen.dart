@@ -247,6 +247,8 @@ class _RingSessionScreenState extends ConsumerState<RingSessionScreen> {
       return const AppShell(
           title: 'Ziyaret', child: Center(child: CircularProgressIndicator()));
     }
+    final compact = MediaQuery.viewInsetsOf(context).bottom > 0 ||
+        MediaQuery.sizeOf(context).height < 650;
     return AppShell(
       title: item.visitorAlias ??
           (item.visitorKind == 'courier' ? 'Kurye ziyareti' : 'Ziyaretçi'),
@@ -266,7 +268,7 @@ class _RingSessionScreenState extends ConsumerState<RingSessionScreen> {
       ],
       child: Column(
         children: [
-          _SessionHero(ring: item),
+          if (!compact) _SessionHero(ring: item),
           if (item.visitorKind == 'courier') ...[
             const SizedBox(height: 10),
             ElevCard(
@@ -310,9 +312,10 @@ class _RingSessionScreenState extends ConsumerState<RingSessionScreen> {
             _MediaPanel(
                 controller: media,
                 video: item.requestedMode == 'video',
+                compact: compact,
                 onEnd: () => _action('end')),
           ],
-          const SizedBox(height: 14),
+          SizedBox(height: compact ? 6 : 14),
           Expanded(
               child: _ChatPanel(ringId: item.id, input: input, onSend: _send)),
         ],
@@ -400,9 +403,13 @@ class _SessionHero extends StatelessWidget {
 class _MediaPanel extends StatelessWidget {
   final MediaSessionController? controller;
   final bool video;
+  final bool compact;
   final VoidCallback onEnd;
   const _MediaPanel(
-      {required this.controller, required this.video, required this.onEnd});
+      {required this.controller,
+      required this.video,
+      required this.compact,
+      required this.onEnd});
 
   @override
   Widget build(BuildContext context) {
@@ -422,7 +429,7 @@ class _MediaPanel extends StatelessWidget {
         children: [
           if (video)
             SizedBox(
-              height: 245,
+              height: compact ? 150 : 245,
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(18),
                 child: Stack(
@@ -434,8 +441,8 @@ class _MediaPanel extends StatelessWidget {
                     Positioned(
                       right: 10,
                       top: 10,
-                      width: 88,
-                      height: 118,
+                      width: compact ? 62 : 88,
+                      height: compact ? 82 : 118,
                       child: ClipRRect(
                           borderRadius: BorderRadius.circular(14),
                           child: RTCVideoView(media.localRenderer,
@@ -469,7 +476,7 @@ class _MediaPanel extends StatelessWidget {
             )
           else
             SizedBox(
-              height: 132,
+              height: compact ? 86 : 132,
               child: Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,

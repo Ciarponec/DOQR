@@ -31,8 +31,10 @@ class MediaSessionController extends ChangeNotifier {
   RTCPeerConnection? _peer;
   MediaStream? _localStream;
   RealtimeChannel? _channel;
+  RTCSessionDescription? _localOffer;
   final List<RTCIceCandidate> _pendingRemoteCandidates = [];
   bool _remoteDescriptionSet = false;
+  bool _offerSending = false;
   bool _started = false;
   bool _muted = false;
   bool _cameraEnabled = true;
@@ -94,6 +96,7 @@ class MediaSessionController extends ChangeNotifier {
           .channel('ring:$ringId',
               opts: const RealtimeChannelConfig(private: true, ack: true))
           .onBroadcast(event: 'webrtc_answer', callback: _onAnswer)
+          .onBroadcast(event: 'webrtc_ready', callback: _onVisitorReady)
           .onBroadcast(event: 'webrtc_ice', callback: _onIce)
           .onBroadcast(
               event: 'webrtc_hangup',
@@ -137,12 +140,8 @@ class MediaSessionController extends ChangeNotifier {
       final offer = await _peer!.createOffer(
           {'offerToReceiveAudio': true, 'offerToReceiveVideo': video});
       await _peer!.setLocalDescription(offer);
-      await _channel!.sendBroadcastMessage(event: 'webrtc_offer', payload: {
-        'from': 'host',
-        'sdp': offer.sdp,
-        'type': offer.type,
-        'video': video,
-      });
+      _localOffer = offer;
+      await _sendOffer();
       _notify();
     } catch (exception) {
       _error = mediaSessionErrorMessage(exception);
@@ -190,14 +189,52 @@ class MediaSessionController extends ChangeNotifier {
 
   void _onAnswer(Map<String, dynamic> payload) {
     final body = _body(payload);
-    if (body['from'] != 'visitor' || body['sdp'] is! String) return;
+    if (_remoteDescriptionSet ||
+        body['from'] != 'visitor' ||
+        body['sdp'] is! String) {
+      return;
+    }
     unawaited(_applyAnswer(body));
+  }
+
+  void _onVisitorReady(Map<String, dynamic> payload) {
+    final body = _body(payload);
+    if (body['from'] != 'visitor' ||
+        _localOffer == null ||
+        _remoteDescriptionSet ||
+        _closed) {
+      return;
+    }
+    unawaited(_sendOffer());
   }
 
   void _onIce(Map<String, dynamic> payload) {
     final body = _body(payload);
     if (body['from'] != 'visitor' || body['candidate'] is! String) return;
     unawaited(_applyIce(body));
+  }
+
+  Future<void> _sendOffer() async {
+    final channel = _channel;
+    final offer = _localOffer;
+    if (channel == null ||
+        offer == null ||
+        _closed ||
+        _remoteDescriptionSet ||
+        _offerSending) {
+      return;
+    }
+    _offerSending = true;
+    try {
+      await channel.sendBroadcastMessage(event: 'webrtc_offer', payload: {
+        'from': 'host',
+        'sdp': offer.sdp,
+        'type': offer.type,
+        'video': video,
+      });
+    } finally {
+      _offerSending = false;
+    }
   }
 
   Future<void> _sendIce(RTCIceCandidate candidate) async {
@@ -277,6 +314,8 @@ class MediaSessionController extends ChangeNotifier {
     remoteRenderer.srcObject = null;
     _connected = false;
     _remoteDescriptionSet = false;
+    _localOffer = null;
+    _offerSending = false;
     _pendingRemoteCandidates.clear();
     _notify();
   }

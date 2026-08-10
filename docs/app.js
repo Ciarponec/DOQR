@@ -16,6 +16,9 @@ let captchaToken = null;
 let muted = false;
 let cameraEnabled = true;
 let remoteDescriptionSet = false;
+let offerHandling = false;
+let mediaReadyTimer;
+let mediaReadyStopTimer;
 let mediaDeadlineTimer;
 let mediaCountdownTimer;
 let mediaLimitEnding = false;
@@ -173,6 +176,7 @@ $('ringBtn').addEventListener('click', async () => {
   $('ringBtn').disabled = true;
   $('ringBtn').textContent = 'Zil çalıyor…';
   try {
+    if (['audio','video'].includes(requestedMode)) await prepareLocalMedia();
     ring = await functionCall('qr-ring-create', {
       qr_token: qrToken,
       visitor_alias: alias || null,
@@ -185,6 +189,7 @@ $('ringBtn').addEventListener('click', async () => {
     await startSession();
     show('sessionView');
   } catch (error) {
+    releaseLocalMedia();
     const unauthorized = /unauthorized|permissions to (read|write).*channel topic/i.test(error?.message || '');
     alert(unauthorized
       ? 'Güvenli iletişim kanalı kurulamadı. Sayfayı yenileyip tekrar deneyin.'
@@ -215,6 +220,33 @@ async function startSession() {
     }));
   const {data: history} = await supabase.from('chat_messages').select('id, sender_type, message_text, created_at').eq('ring_id', ring.ring_id).order('created_at');
   (history || []).forEach(appendMessage);
+  startMediaReadyLoop();
+}
+
+function mediaConstraints() {
+  return {
+    audio: {echoCancellation:true,noiseSuppression:true,autoGainControl:true},
+    video: requestedMode === 'video' ? {facingMode:'user',width:{ideal:1280},height:{ideal:720}} : false,
+  };
+}
+
+async function prepareLocalMedia() {
+  if (localStream) return localStream;
+  if (!navigator.mediaDevices?.getUserMedia) {
+    throw new Error('Bu tarayıcı sesli veya görüntülü görüşmeyi desteklemiyor.');
+  }
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia(mediaConstraints());
+    return localStream;
+  } catch (_) {
+    const devices = requestedMode === 'video' ? 'kamera ve mikrofon' : 'mikrofon';
+    throw new Error(`Görüşme için ${devices} izni gerekiyor.`);
+  }
+}
+
+function releaseLocalMedia() {
+  localStream?.getTracks().forEach((track) => track.stop());
+  localStream = null;
 }
 
 function updateRingState(value) {
@@ -224,10 +256,34 @@ function updateRingState(value) {
   $('sessionEyebrow').textContent = accepted ? 'Bağlandı' : 'Zil durumu';
   $('sessionTitle').textContent = accepted ? (requestedMode === 'text' ? 'Host yanıtladı' : 'Görüşme başlıyor') : ({declined:'Host şu anda müsait değil', missed:'Zil cevapsız kaldı', cancelled:'Ziyaret iptal edildi', ended:'Görüşme sona erdi'}[value.status] || 'Host bekleniyor');
   $('sessionSubtitle').textContent = accepted ? 'Güvenli oturum aktif.' : 'Bu sayfayı açık tutabilirsiniz.';
+  if (accepted) startMediaReadyLoop();
   if (['declined','missed','cancelled','ended'].includes(value.status)) {
     $('cancelBtn').classList.add('hidden');
     closeMedia(false);
   }
+}
+
+async function announceMediaReady() {
+  if (!channel || remoteDescriptionSet || !['audio','video'].includes(requestedMode)) return;
+  await channel.send({
+    type: 'broadcast',
+    event: 'webrtc_ready',
+    payload: {from: 'visitor', requested_mode: requestedMode},
+  });
+}
+
+function startMediaReadyLoop() {
+  if (mediaReadyTimer || remoteDescriptionSet || !['audio','video'].includes(requestedMode)) return;
+  void announceMediaReady();
+  mediaReadyTimer = setInterval(() => void announceMediaReady(), 1500);
+  mediaReadyStopTimer = setTimeout(stopMediaReadyLoop, 15000);
+}
+
+function stopMediaReadyLoop() {
+  clearInterval(mediaReadyTimer);
+  clearTimeout(mediaReadyStopTimer);
+  mediaReadyTimer = undefined;
+  mediaReadyStopTimer = undefined;
 }
 
 function appendMessage(message) {
@@ -262,17 +318,21 @@ async function ringAction(action) {
 }
 
 async function handleOffer(offer) {
-  if (offer.from !== 'host' || !['audio','video'].includes(requestedMode)) return;
+  if (offerHandling || remoteDescriptionSet || offer.from !== 'host' || !offer.sdp || !['audio','video'].includes(requestedMode)) return;
+  offerHandling = true;
   try {
     if (!peer) await createMediaPeer();
     await peer.setRemoteDescription({type: offer.type || 'offer', sdp: offer.sdp});
     remoteDescriptionSet = true;
+    stopMediaReadyLoop();
     for (const candidate of pendingHostCandidates.splice(0)) await peer.addIceCandidate(candidate);
     const answer = await peer.createAnswer();
     await peer.setLocalDescription(answer);
     await channel.send({type: 'broadcast', event: 'webrtc_answer', payload: {from:'visitor', type:answer.type, sdp:answer.sdp}});
   } catch (error) {
     $('connectionLabel').textContent = 'Medya izni veya bağlantı kurulamadı';
+  } finally {
+    offerHandling = false;
   }
 }
 
@@ -285,7 +345,7 @@ async function createMediaPeer() {
   };
   peer.ontrack = ({streams}) => { $('remoteVideo').srcObject = streams[0]; };
   peer.onconnectionstatechange = () => { $('connectionLabel').textContent = peer.connectionState === 'connected' ? 'Bağlandı' : 'Bağlanıyor…'; };
-  localStream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:requestedMode === 'video' ? {facingMode:'user',width:{ideal:1280},height:{ideal:720}} : false});
+  await prepareLocalMedia();
   localStream.getTracks().forEach((track) => peer.addTrack(track, localStream));
   $('localVideo').srcObject = localStream;
   $('mediaCard').classList.remove('hidden');
@@ -341,14 +401,16 @@ async function handleIce(candidate) {
 $('muteBtn').addEventListener('click', () => { muted = !muted; localStream?.getAudioTracks().forEach((track) => track.enabled = !muted); $('muteBtn').textContent = muted ? '×' : '🎙'; });
 $('cameraBtn').addEventListener('click', () => { cameraEnabled = !cameraEnabled; localStream?.getVideoTracks().forEach((track) => track.enabled = cameraEnabled); $('cameraBtn').textContent = cameraEnabled ? '▣' : '×'; });
 async function closeMedia(notify = true) {
+  stopMediaReadyLoop();
   clearMediaDeadline();
   if (notify && channel) await channel.send({type:'broadcast',event:'webrtc_hangup',payload:{from:'visitor'}});
-  localStream?.getTracks().forEach((track) => track.stop());
-  peer?.close(); peer = null; localStream = null;
+  releaseLocalMedia();
+  peer?.close(); peer = null;
   remoteDescriptionSet = false;
+  offerHandling = false;
   pendingHostCandidates.splice(0);
   $('mediaCard').classList.add('hidden');
 }
 
-addEventListener('beforeunload', () => { localStream?.getTracks().forEach((track) => track.stop()); peer?.close(); });
+addEventListener('beforeunload', () => { stopMediaReadyLoop(); localStream?.getTracks().forEach((track) => track.stop()); peer?.close(); });
 bootstrap();
