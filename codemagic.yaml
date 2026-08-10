@@ -1,0 +1,47 @@
+workflows:
+  doqr-ios:
+    name: DOQR iOS Release
+    max_build_duration: 120
+    integrations:
+      app_store_connect: Yummy ASC key
+    environment:
+      flutter: stable
+      xcode: 26.4
+      cocoapods: default
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.doqr.app
+      vars:
+        APP_STORE_APPLE_ID: 6800038738
+    scripts:
+      - name: Apply automatic iOS signing
+        script: |
+          cd flutter_app
+          xcode-project use-profiles
+      - name: Get Flutter packages
+        script: |
+          cd flutter_app
+          flutter pub get
+      - name: Install CocoaPods
+        script: |
+          cd flutter_app/ios
+          pod install
+      - name: Flutter analyze
+        script: |
+          cd flutter_app
+          flutter analyze
+      - name: Flutter unit tests
+        script: |
+          cd flutter_app
+          flutter test
+      - name: Build signed IPA
+        script: |
+          cd flutter_app
+          flutter build ipa --release \
+            --build-name=1.0.0 \
+            --build-number=6 \
+            --export-options-plist=/Users/builder/export_options.plist
+    artifacts:
+      - flutter_app/build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - flutter_drive.log
