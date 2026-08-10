@@ -94,15 +94,32 @@ export async function requireUser(authHeader?: string): Promise<User> {
   if (!authHeader?.startsWith("Bearer ")) {
     throw new HttpError(401, "Oturum gerekli", "AUTH_REQUIRED");
   }
-  const { data, error } = await clientWithJwt(authHeader).auth.getUser();
-  if (error || !data.user) {
-    throw new HttpError(
-      401,
-      "Geçersiz veya süresi dolmuş oturum",
-      "AUTH_INVALID",
-    );
+
+  const auth = clientWithJwt(authHeader).auth;
+  const clockSkewBackoffMs = [0, 750, 1_500];
+  for (const delayMs of clockSkewBackoffMs) {
+    if (delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+    try {
+      const { data, error } = await auth.getUser();
+      if (data.user) return data.user;
+      if (!error?.message.toLowerCase().includes("jwt issued at future")) {
+        break;
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!message.toLowerCase().includes("jwt issued at future")) {
+        break;
+      }
+    }
   }
-  return data.user;
+
+  throw new HttpError(
+    401,
+    "Geçersiz veya süresi dolmuş oturum",
+    "AUTH_INVALID",
+  );
 }
 
 export async function requirePermanentUser(authHeader?: string): Promise<User> {
