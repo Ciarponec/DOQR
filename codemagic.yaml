@@ -48,7 +48,6 @@ workflows:
       app_store_connect:
         # Reuse the App Store Connect integration configured in Codemagic.
         auth: integration
-        submit_to_testflight: true
     artifacts:
       - flutter_app/build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
