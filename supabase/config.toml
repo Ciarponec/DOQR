@@ -466,3 +466,6 @@ verify_jwt = true
 
 [functions.door-share-accept]
 verify_jwt = true
+
+[functions.store-purchase-verify]
+verify_jwt = true

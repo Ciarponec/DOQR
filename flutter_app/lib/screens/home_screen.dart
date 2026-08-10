@@ -77,14 +77,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 children: [
                   _PlanHeader(
                     plan: data.doors.accountPlan,
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute<void>(
-                        builder: (_) => PlansScreen(
-                          currentPlan: data.doors.accountPlan,
+                    onTap: () async {
+                      final changed = await Navigator.push<bool>(
+                        context,
+                        MaterialPageRoute<bool>(
+                          builder: (_) => PlansScreen(
+                            currentPlan: data.doors.accountPlan,
+                          ),
                         ),
-                      ),
-                    ),
+                      );
+                      if (changed == true && mounted) await _refresh();
+                    },
                   ),
                   const SizedBox(height: 16),
                   FilledButton.icon(

@@ -2,66 +2,103 @@ import 'package:flutter/material.dart';
 
 import '../models/door_item.dart';
 import '../models/plan_catalog.dart';
+import '../services/store_purchase_service.dart';
 import '../ui/app_theme.dart';
 import '../widgets/app_shell.dart';
 
-class PlansScreen extends StatelessWidget {
+class PlansScreen extends StatefulWidget {
   final PlanItem currentPlan;
 
   const PlansScreen({super.key, required this.currentPlan});
+
+  @override
+  State<PlansScreen> createState() => _PlansScreenState();
+}
+
+class _PlansScreenState extends State<PlansScreen> {
+  final _store = StorePurchaseService.instance;
+  bool _handlingSuccess = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _store.addListener(_onStoreChanged);
+    _store.initialize();
+  }
+
+  @override
+  void dispose() {
+    _store.removeListener(_onStoreChanged);
+    super.dispose();
+  }
+
+  void _onStoreChanged() {
+    if (mounted) setState(() {});
+    if (!_handlingSuccess && _store.takeEntitlementActivated()) {
+      _handlingSuccess = true;
+      Future.microtask(() {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('DOQR Pro hesabında etkinleştirildi.')),
+        );
+        Navigator.of(context).pop(true);
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) => AppShell(
         title: 'Planlar',
         child: ListView(
           children: [
-            _CurrentPlanCard(plan: currentPlan),
+            _CurrentPlanCard(plan: widget.currentPlan),
             const SizedBox(height: 22),
             const SectionLabel('Planları karşılaştır'),
-            const _PlanColumns(),
+            _PlanColumns(proPrice: _store.displayPrice),
             const SizedBox(height: 18),
             FilledButton.icon(
-              onPressed: currentPlan.isPro && !currentPlan.isTrial
+              onPressed: widget.currentPlan.isPro && !widget.currentPlan.isTrial
                   ? null
-                  : () => _showPurchaseInfo(context),
+                  : (_store.processing ? null : _store.buyPro),
               icon: const Icon(Icons.workspace_premium_rounded),
-              label: Text(currentPlan.isPro && !currentPlan.isTrial
-                  ? 'Pro planın aktif'
-                  : "Pro'yu Satın Al • ${PlanCatalog.proAnnualPriceLabel}"),
+              label:
+                  Text(widget.currentPlan.isPro && !widget.currentPlan.isTrial
+                      ? 'Pro planın aktif'
+                      : _store.processing
+                          ? 'Mağaza onayı bekleniyor…'
+                          : "Pro'yu Satın Al • ${_store.displayPrice} / yıl"),
+            ),
+            if (_store.loading) ...[
+              const SizedBox(height: 10),
+              const LinearProgressIndicator(),
+            ],
+            if (_store.error != null) ...[
+              const SizedBox(height: 10),
+              Text(
+                _store.error!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: AppColors.danger, fontSize: 12),
+              ),
+            ],
+            TextButton(
+              onPressed: _store.processing ? null : _store.restorePurchases,
+              child: const Text('Satın almayı geri yükle'),
             ),
             const SizedBox(height: 10),
             const Text(
-              'Abonelik yıllık yenilenir. Satın alma onayından önce mağaza koşulları ve toplam tutar gösterilir.',
+              'DOQR Pro yıllık ve otomatik yenilenen bir aboneliktir. Ücret, mağaza hesabınızdan tahsil edilir. Yenilemeyi Google Play veya App Store abonelik ayarlarından istediğiniz zaman iptal edebilirsiniz; ödenmiş dönem sonuna kadar Pro erişiminiz sürer.',
               textAlign: TextAlign.center,
               style: TextStyle(color: AppColors.muted, fontSize: 11),
             ),
           ],
         ),
       );
-
-  Future<void> _showPurchaseInfo(BuildContext context) => showDialog<void>(
-        context: context,
-        builder: (context) => AlertDialog(
-          icon: const Icon(Icons.shopping_bag_outlined,
-              color: AppColors.blue, size: 34),
-          title: const Text("Pro'yu Satın Al"),
-          content: const Text(
-            'DOQR Pro yıllık \$14.99 olacak. Güvenli App Store ve Google Play ödeme bağlantısı tamamlandığında satın alma bu ekrandan açılacak.',
-            textAlign: TextAlign.center,
-          ),
-          actions: [
-            FilledButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Anladım'),
-            ),
-          ],
-          actionsAlignment: MainAxisAlignment.center,
-        ),
-      );
 }
 
 class _PlanColumns extends StatelessWidget {
-  const _PlanColumns();
+  final String proPrice;
+
+  const _PlanColumns({required this.proPrice});
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -86,7 +123,7 @@ class _PlanColumns extends StatelessWidget {
                 Expanded(
                   child: _PlanCard(
                     title: 'Pro',
-                    price: PlanCatalog.proAnnualPriceLabel,
+                    price: '$proPrice / yıl',
                     subtitle: 'Görüşme, kurye ve uzun geçmiş.',
                     icon: Icons.workspace_premium_rounded,
                     accent: AppColors.warning,

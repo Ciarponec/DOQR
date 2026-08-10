@@ -32,6 +32,21 @@ class DoqrApi {
     throw Exception('İstek başarısız (${response.status})');
   }
 
+  Future<Map<String, dynamic>> verifyStorePurchase({
+    required String provider,
+    required String productId,
+    required String verificationData,
+  }) async {
+    final response =
+        await client.functions.invoke('store-purchase-verify', body: {
+      'provider': provider,
+      'product_id': productId,
+      'verification_data': verificationData,
+    });
+    if (response.status != 200) _throw(response);
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
   Future<DoorListResult> listDoors() async {
     final response =
         await client.functions.invoke('door-list', method: HttpMethod.get);

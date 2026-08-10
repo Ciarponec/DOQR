@@ -8,6 +8,7 @@ import 'screens/chat_screen.dart';
 import 'screens/doors_manage_screen.dart';
 import 'screens/home_screen.dart';
 import 'services/notification_service.dart';
+import 'services/store_purchase_service.dart';
 import 'ui/app_theme.dart';
 
 final navigatorKey = GlobalKey<NavigatorState>();
@@ -17,6 +18,7 @@ Future<void> main() async {
   AppConfig.validate();
   await Supabase.initialize(
       url: AppConfig.supabaseUrl, publishableKey: AppConfig.supabaseKey);
+  await StorePurchaseService.instance.initialize();
   await NotificationService.instance.initialize();
   runApp(const ProviderScope(child: DoqrApp()));
 }
