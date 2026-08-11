@@ -5,10 +5,13 @@ import '../app_config.dart';
 import '../l10n/app_language.dart';
 import '../models/door_item.dart';
 import '../services/providers.dart';
+import '../services/door_qr_cache.dart';
+import '../ui/app_theme.dart';
 import '../widgets/app_shell.dart';
 import 'courier_notes_screen.dart';
 import 'door_blocks_screen.dart';
 import 'door_qr_screen.dart';
+import 'door_share_screen.dart';
 
 class DoorsManageScreen extends ConsumerStatefulWidget {
   const DoorsManageScreen({super.key});
@@ -217,20 +220,93 @@ class _DoorsManageScreenState extends ConsumerState<DoorsManageScreen> {
 
   Future<void> _showQr(DoorItem door) async {
     try {
-      final result =
-          await ref.read(doqrApiProvider).createQrToken(doorId: door.id);
+      var token = await DoorQrCache.read(door.id);
+      token ??= (await ref.read(doqrApiProvider).createQrToken(doorId: door.id))
+          ['qr_token'] as String;
+      await DoorQrCache.save(door.id, token);
       if (!mounted) return;
       final url = AppConfig.visitorUrlForToken(
-        result['qr_token'] as String,
+        token,
       ).toString();
       await Navigator.push(
         context,
         MaterialPageRoute(
             builder: (_) => DoorQrScreen(
                 doorLabel: door.label,
-                qrUrl: url,
-                tokenId: result['token_id'] as String)),
+                qrUrl: url)),
       );
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.toString())));
+      }
+    }
+  }
+
+  Future<void> _acceptShareInvite() async {
+    final token = TextEditingController();
+    final pin = TextEditingController();
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(context.tr('Kapı davetine katıl', 'Join door invite')),
+        content: SizedBox(
+          width: 380,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                context.tr(
+                    'Kapı sahibinin gönderdiği davet kodunu girin. Katıldığınızda bu kapının bildirimlerini ve ziyaret mesajlarını alırsınız.',
+                    'Enter the invite code sent by the door owner. Once joined, you receive this door’s notifications and visitor messages.'),
+                style: Theme.of(context)
+                    .textTheme
+                    .bodyMedium
+                    ?.copyWith(color: AppColors.muted),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: token,
+                autofocus: true,
+                maxLength: 256,
+                decoration: InputDecoration(
+                    labelText: context.tr('Davet kodu', 'Invite code')),
+              ),
+              TextField(
+                controller: pin,
+                keyboardType: TextInputType.number,
+                maxLength: 12,
+                decoration: InputDecoration(
+                    labelText: context.tr('PIN (varsa)', 'PIN (if provided)')),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(context.tr('Vazgeç', 'Cancel'))),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(context.tr('Katıl', 'Join'))),
+        ],
+      ),
+    );
+    final shareToken = token.text.trim();
+    final sharePin = pin.text.trim();
+    token.dispose();
+    pin.dispose();
+    if (accepted != true || shareToken.isEmpty) return;
+    try {
+      await ref.read(doqrApiProvider).acceptDoorShareInvite(
+            shareToken: shareToken,
+            pin: sharePin.isEmpty ? null : sharePin,
+          );
+      _reload();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(context.tr('Kapı eklendi.', 'Door added.'))));
+      }
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -268,7 +344,14 @@ class _DoorsManageScreenState extends ConsumerState<DoorsManageScreen> {
                               ? () => _create(result.accountPlan)
                               : null,
                       icon: const Icon(Icons.add_rounded),
-                      label: Text(context.tr('Ekle', 'Add')),
+                        label: Text(context.tr('Ekle', 'Add')),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton.outlined(
+                      tooltip: context.tr(
+                          'Davet kodunu kullan', 'Use invite code'),
+                      onPressed: _acceptShareInvite,
+                      icon: const Icon(Icons.group_add_rounded),
                     ),
                   ],
                 ),
@@ -322,8 +405,8 @@ class _DoorsManageScreenState extends ConsumerState<DoorsManageScreen> {
                                                 icon: const Icon(
                                                     Icons.qr_code_2_rounded),
                                                 label: Text(context.tr(
-                                                    'QR oluştur',
-                                                    'Create QR')))),
+                                                    'QR kodu',
+                                                    'QR code')))),
                                         const SizedBox(width: 8),
                                         Expanded(
                                           child: OutlinedButton.icon(
@@ -357,14 +440,37 @@ class _DoorsManageScreenState extends ConsumerState<DoorsManageScreen> {
                                         onPressed: () => Navigator.push(
                                           context,
                                           MaterialPageRoute(
-                                            builder: (_) =>
-                                                DoorBlocksScreen(door: door),
-                                          ),
+                                              builder: (_) =>
+                                                  DoorShareScreen(door: door)),
                                         ),
+                                        icon: const Icon(Icons.people_alt_rounded),
+                                        label: Text(context.tr(
+                                            'Host ile paylaş',
+                                            'Share with host')),
+                                      ),
+                                    ),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: TextButton.icon(
+                                        onPressed: door.plan
+                                                .has('visitor_blocking')
+                                            ? () => Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute(
+                                                    builder: (_) =>
+                                                        DoorBlocksScreen(
+                                                            door: door),
+                                                  ),
+                                                )
+                                            : null,
                                         icon: const Icon(Icons.shield_outlined),
                                         label: Text(context.tr(
-                                            'Engellenen cihazlar ve ağlar',
-                                            'Blocked devices and networks')),
+                                            door.plan.has('visitor_blocking')
+                                                ? 'Engellenen cihazlar ve ağlar'
+                                                : 'Engeller (Pro)',
+                                            door.plan.has('visitor_blocking')
+                                                ? 'Blocked devices and networks'
+                                                : 'Blocking (Pro)')),
                                       ),
                                     ),
                                   ],

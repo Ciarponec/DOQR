@@ -170,9 +170,12 @@ class DoqrApi {
   }
 
   Future<RingItem> ringAction(
-      {required String ringId, required String action}) async {
-    final response = await client.functions
-        .invoke('ring-action', body: {'ring_id': ringId, 'action': action});
+      {required String ringId, required String action, String? mode}) async {
+    final response = await client.functions.invoke('ring-action', body: {
+      'ring_id': ringId,
+      'action': action,
+      if (mode != null) 'mode': mode,
+    });
     if (response.status != 200) _throw(response);
     return getRing(ringId);
   }
@@ -205,6 +208,34 @@ class DoqrApi {
   Future<void> revokeQrToken({required String tokenId}) async {
     final response = await client.functions
         .invoke('door-qr-token-revoke', body: {'token_id': tokenId});
+    if (response.status != 200) _throw(response);
+  }
+
+  Future<Map<String, dynamic>> createDoorShareInvite({
+    required String doorId,
+    int expiresMinutes = 1440,
+    String? pin,
+  }) async {
+    final response =
+        await client.functions.invoke('door-share-create', body: {
+      'door_id': doorId,
+      'expires_minutes': expiresMinutes,
+      'max_uses': 1,
+      'pin': pin,
+    });
+    if (response.status != 201) _throw(response);
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  Future<void> acceptDoorShareInvite({
+    required String shareToken,
+    String? pin,
+  }) async {
+    final response =
+        await client.functions.invoke('door-share-accept', body: {
+      'share_token': shareToken,
+      'pin': pin,
+    });
     if (response.status != 200) _throw(response);
   }
 

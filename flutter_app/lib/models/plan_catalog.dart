@@ -40,12 +40,6 @@ class PlanCatalog {
       'Last 3 visit records',
       'Quickly access the three most recent visitor records.',
     ),
-    PlanFeature(
-      'Spam koruması ve cihaz engelleme',
-      'Arka arkaya zil çalmayı sınırla ve rahatsız eden cihazları engelle.',
-      'Spam protection and device blocking',
-      'Limit repeated rings and block disruptive devices.',
-    ),
   ];
 
   static const proFeatures = <PlanFeature>[
@@ -69,15 +63,21 @@ class PlanCatalog {
     ),
     PlanFeature(
       '3 dijital zil ve zil başına 3 host',
-      'Birden fazla kapıyı ve ev sahibi hesabını birlikte yönet.',
+      'Kapıyı eşinizle veya ekibinizle ortak yönetin; herkes bildirim alır.',
       '3 digital doorbells and 3 hosts per door',
-      'Manage multiple doors and host accounts together.',
+      'Share a door with your household or team so each host receives alerts.',
     ),
     PlanFeature(
       'Kurye notları ve teslimat kodları',
       'Kargo firmasına özel notları ve tek kullanımlık teslimat bilgisini göster.',
       'Courier notes and delivery codes',
       'Show courier-specific notes and one-time delivery information.',
+    ),
+    PlanFeature(
+      'Spam koruması ve cihaz engelleme',
+      'Arka arkaya zil çalmayı sınırla ve rahatsız eden cihazları engelle.',
+      'Spam protection and device blocking',
+      'Limit repeated rings and block disruptive devices.',
     ),
     PlanFeature(
       '90 günlük ziyaret geçmişi',

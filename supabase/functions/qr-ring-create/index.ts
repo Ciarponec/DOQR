@@ -1,6 +1,5 @@
 import { notifyDoorbell, runInBackground } from "../_shared/fcm.ts";
 import { enabledModes, getOwnerPlan } from "../_shared/plans.ts";
-import { getTurnServiceStatus } from "../_shared/turn.ts";
 import {
   cleanText,
   errorResponse,
@@ -82,8 +81,12 @@ Deno.serve(async (req) => {
     if (!["guest", "courier", "other"].includes(visitorKind)) {
       throw new HttpError(400, "Geçersiz ziyaretçi türü", "VALIDATION_ERROR");
     }
-    if (!["text", "audio", "video"].includes(requestedMode)) {
-      throw new HttpError(400, "Geçersiz görüşme türü", "VALIDATION_ERROR");
+    if (requestedMode !== "text") {
+      throw new HttpError(
+        400,
+        "Ziyaretçi yalnızca zili çalabilir; görüşme türünü host seçer",
+        "VISITOR_MODE_NOT_ALLOWED",
+      );
     }
     if (courierCode && !/^[a-z0-9_-]{2,40}$/.test(courierCode)) {
       throw new HttpError(400, "Geçersiz kurye kodu", "VALIDATION_ERROR");
@@ -127,49 +130,48 @@ Deno.serve(async (req) => {
         "DOOR_INACTIVE",
       );
     }
+    const plan = await getOwnerPlan(admin, door.owner_user_id);
 
-    const nowIso = new Date().toISOString();
-    const { data: blockRows, error: blockError } = await admin
-      .from("door_blocks")
-      .select("block_type, value_hash, expires_at")
-      .eq("door_id", token.door_id)
-      .in("value_hash", [deviceHash, ipHash])
-      .or(`expires_at.is.null,expires_at.gt.${nowIso}`);
-    if (blockError) throw new Error(blockError.message);
-    const blocked = (blockRows ?? []).some((row) =>
-      (row.block_type === "device" && row.value_hash === deviceHash) ||
-      (row.block_type === "network" && row.value_hash === ipHash)
-    );
-    if (blocked) {
-      throw new HttpError(
-        403,
-        "Bu dijital zil bu cihazdan kullanılamıyor",
-        "VISITOR_BLOCKED",
+    if (plan.features.spam_protection === true) {
+      const nowIso = new Date().toISOString();
+      const { data: blockRows, error: blockError } = await admin
+        .from("door_blocks")
+        .select("block_type, value_hash, expires_at")
+        .eq("door_id", token.door_id)
+        .in("value_hash", [deviceHash, ipHash])
+        .or(`expires_at.is.null,expires_at.gt.${nowIso}`);
+      if (blockError) throw new Error(blockError.message);
+      const blocked = (blockRows ?? []).some((row) =>
+        (row.block_type === "device" && row.value_hash === deviceHash) ||
+        (row.block_type === "network" && row.value_hash === ipHash)
       );
+      if (blocked) {
+        throw new HttpError(
+          403,
+          "Bu dijital zil bu cihazdan kullanılamıyor",
+          "VISITOR_BLOCKED",
+        );
+      }
+      await Promise.all([
+        consumeLimit(admin, "device", `${token.door_id}:${deviceHash}`, 1, 30, 60),
+        consumeLimit(admin, "ip", `${token.door_id}:${ipHash}`, 8, 60, 5 * 60),
+        consumeLimit(admin, "door", token.door_id, 20, 60, 2 * 60),
+      ]);
+    } else {
+      // Every door has a deliberately broad platform safety guard.  It is not
+      // a user-facing anti-spam feature; Pro adds the tighter limits and blocks.
+      await Promise.all([
+        consumeLimit(admin, "device", `${token.door_id}:${deviceHash}`, 10, 60, 60),
+        consumeLimit(admin, "ip", `${token.door_id}:${ipHash}`, 60, 60, 5 * 60),
+        consumeLimit(admin, "door", token.door_id, 120, 60, 2 * 60),
+      ]);
     }
 
-    await Promise.all([
-      // One successful ring per device/door every 30 seconds. A repeated
-      // attempt starts a one-minute cooldown, while household networks and
-      // the door itself retain looser aggregate protection.
-      consumeLimit(
-        admin,
-        "device",
-        `${token.door_id}:${deviceHash}`,
-        1,
-        30,
-        60,
-      ),
-      consumeLimit(admin, "ip", `${token.door_id}:${ipHash}`, 8, 60, 5 * 60),
-      consumeLimit(admin, "door", token.door_id, 20, 60, 2 * 60),
-    ]);
-
-    const [{ data: settings, error: settingsError }, plan] = await Promise.all([
-      admin.from("door_settings").select(
-        "text_enabled, audio_enabled, video_enabled, require_visitor_name, ring_timeout_seconds",
-      ).eq("door_id", token.door_id).single(),
-      getOwnerPlan(admin, door.owner_user_id),
-    ]);
+    const { data: settings, error: settingsError } = await admin
+      .from("door_settings")
+      .select("text_enabled, audio_enabled, video_enabled, require_visitor_name, ring_timeout_seconds")
+      .eq("door_id", token.door_id)
+      .single();
     if (settingsError || !settings) {
       throw new Error(settingsError?.message ?? "Door settings missing");
     }
@@ -181,28 +183,12 @@ Deno.serve(async (req) => {
       );
     }
     const modes = enabledModes(settings, plan);
-    if (modes[requestedMode as keyof typeof modes] !== true) {
-      const code = requestedMode === "text"
-        ? "MODE_DISABLED"
-        : "PRO_OR_MODE_REQUIRED";
+    if (!Object.values(modes).some(Boolean)) {
       throw new HttpError(
-        403,
-        "Bu görüşme seçeneği şu anda kullanılamıyor",
-        code,
+        503,
+        "Host şu anda görüşme kabul etmiyor",
+        "NO_MODES_AVAILABLE",
       );
-    }
-    if (requestedMode === "audio" || requestedMode === "video") {
-      const turnStatus = await getTurnServiceStatus(admin);
-      if (!turnStatus.enabled) {
-        const monthlyLimit = turnStatus.reason === "monthly_limit";
-        throw new HttpError(
-          503,
-          monthlyLimit
-            ? "Sesli ve görüntülü görüşme bu ayki altyapı sınırına ulaştı"
-            : "Sesli ve görüntülü görüşme geçici olarak kullanılamıyor",
-          monthlyLimit ? "TURN_MONTHLY_LIMIT" : "TURN_UNAVAILABLE",
-        );
-      }
     }
 
     const { error: usageError } = await admin.rpc("reserve_doorbell_usage", {
@@ -248,7 +234,11 @@ Deno.serve(async (req) => {
       device_memory: Number(body.client?.device_memory ?? 0) || null,
       touch_points: Number(body.client?.touch_points ?? 0) || null,
     };
-    let matchedCourierNoteId: string | null = null;
+    let matchedCourierNote: {
+      id: string;
+      message_text: string;
+      courier_label: string;
+    } | null = null;
     if (
       visitorKind === "courier" && courierCode &&
       plan.features.courier_notes === true
@@ -256,7 +246,7 @@ Deno.serve(async (req) => {
       const now = new Date().toISOString();
       const { data: note, error: noteError } = await admin
         .from("courier_notes")
-        .select("id")
+        .select("id, message_text, courier_label")
         .eq("door_id", token.door_id)
         .eq("courier_code", courierCode)
         .eq("is_active", true)
@@ -264,7 +254,7 @@ Deno.serve(async (req) => {
         .or(`active_until.is.null,active_until.gt.${now}`)
         .maybeSingle();
       if (noteError) throw new Error(noteError.message);
-      matchedCourierNoteId = note?.id ?? null;
+      matchedCourierNote = note ?? null;
     }
 
     const sessionExpiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000)
@@ -277,7 +267,7 @@ Deno.serve(async (req) => {
         visitor_alias: visitorAlias,
         visitor_kind: visitorKind,
         courier_code: visitorKind === "courier" ? courierCode : null,
-        courier_note_id: matchedCourierNoteId,
+        courier_note_id: matchedCourierNote?.id ?? null,
         requested_mode: requestedMode,
         source_token_hash: tokenHash,
         visitor_ip_hash: ipHash,
@@ -300,6 +290,15 @@ Deno.serve(async (req) => {
       actor_user_id: visitor.id,
       metadata: { requested_mode: requestedMode, visitor_kind: visitorKind },
     });
+    if (matchedCourierNote) {
+      const { error: noteMessageError } = await admin.from("chat_messages")
+        .insert({
+          ring_id: ring.id,
+          sender_type: "system",
+          message_text: matchedCourierNote.message_text,
+        });
+      if (noteMessageError) throw new Error(noteMessageError.message);
+    }
 
     const { data: sharedRows, error: sharedError } = await admin
       .from("door_shared_users")
@@ -316,6 +315,8 @@ Deno.serve(async (req) => {
       doorLabel: door.label,
       visitorAlias,
       requestedMode,
+      courierNoteAvailable: matchedCourierNote != null,
+      courierLabel: matchedCourierNote?.courier_label,
       recipientIds: [...new Set(recipients)],
     }));
 
@@ -326,8 +327,8 @@ Deno.serve(async (req) => {
       ring_timeout_seconds: settings.ring_timeout_seconds,
       session_expires_at: sessionExpiresAt,
       created_at: ring.created_at,
-      courier_note_available: matchedCourierNoteId != null,
-      courier_note_revealed: false,
+      courier_note_available: matchedCourierNote != null,
+      courier_note_revealed: matchedCourierNote != null,
     }, req);
   } catch (error) {
     return errorResponse(error, req);

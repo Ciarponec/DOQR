@@ -45,8 +45,13 @@ class NotificationService {
         android: AndroidInitializationSettings('@mipmap/ic_launcher'),
         iOS: DarwinInitializationSettings(),
       ),
-      onDidReceiveNotificationResponse: (response) =>
-          _openRing(response.payload),
+      onDidReceiveNotificationResponse: (response) {
+        if (response.actionId == 'share_delivery_code') {
+          unawaited(_shareDeliveryCode(response.payload));
+        } else {
+          _openRing(response.payload);
+        }
+      },
     );
     await _local
         .resolvePlatformSpecificImplementation<
@@ -112,7 +117,7 @@ class NotificationService {
             (locale.languageCode == 'en'
                 ? 'There is a visitor at the door'
                 : 'Kapıda bir ziyaretçi var'),
-        notificationDetails: const NotificationDetails(
+        notificationDetails: NotificationDetails(
           android: AndroidNotificationDetails(
             'doqr_rings',
             'Kapı zili',
@@ -121,6 +126,15 @@ class NotificationService {
             priority: Priority.high,
             category: AndroidNotificationCategory.call,
             fullScreenIntent: true,
+            actions: message.data['courier_note_available'] == 'true'
+                ? const [
+                    AndroidNotificationAction(
+                      'share_delivery_code',
+                      'Teslimat kodunu gönder',
+                      showsUserInterface: true,
+                    ),
+                  ]
+                : const [],
           ),
           iOS: DarwinNotificationDetails(
               presentAlert: true, presentBadge: true, presentSound: true),
@@ -151,6 +165,17 @@ class NotificationService {
     await _openedSubscription?.cancel();
     await _foregroundRingChannel?.unsubscribe();
     _foregroundRingChannel = null;
+  }
+
+  Future<void> _shareDeliveryCode(String? ringId) async {
+    if (ringId == null || ringId.isEmpty || _api == null) return;
+    try {
+      await _api!.ringAction(ringId: ringId, action: 'reveal_note');
+    } catch (_) {
+      // The session may have ended, or this courier note may not contain a
+      // delivery code. Opening the visit gives the host a clear next step.
+      _openRing(ringId);
+    }
   }
 
   Future<String?> _getTokenWhenReady() async {

@@ -12,13 +12,11 @@ import '../widgets/app_shell.dart';
 class DoorQrScreen extends StatefulWidget {
   final String doorLabel;
   final String qrUrl;
-  final String tokenId;
 
   const DoorQrScreen({
     super.key,
     required this.doorLabel,
     required this.qrUrl,
-    required this.tokenId,
   });
 
   @override
@@ -28,6 +26,8 @@ class DoorQrScreen extends StatefulWidget {
 class _DoorQrScreenState extends State<DoorQrScreen> {
   late final TextEditingController _topTextController;
   late final TextEditingController _bottomTextController;
+  late final TextEditingController _sideTextController;
+  QrPdfTemplate _template = QrPdfTemplate.minimal;
   bool _isPreparingPdf = false;
 
   @override
@@ -35,8 +35,10 @@ class _DoorQrScreenState extends State<DoorQrScreen> {
     super.initState();
     _topTextController = TextEditingController();
     _bottomTextController = TextEditingController();
+    _sideTextController = TextEditingController();
     _topTextController.addListener(_refreshPreview);
     _bottomTextController.addListener(_refreshPreview);
+    _sideTextController.addListener(_refreshPreview);
   }
 
   @override
@@ -47,16 +49,30 @@ class _DoorQrScreenState extends State<DoorQrScreen> {
     _bottomTextController
       ..removeListener(_refreshPreview)
       ..dispose();
+    _sideTextController
+      ..removeListener(_refreshPreview)
+      ..dispose();
     super.dispose();
   }
 
   void _refreshPreview() => setState(() {});
+
+  void _applyPreset(_QrTextPreset preset) {
+    setState(() {
+      _template = preset.template;
+      _topTextController.text = preset.topTextFor(context);
+      _bottomTextController.text = preset.bottomTextFor(context);
+      _sideTextController.text = preset.sideTextFor(context);
+    });
+  }
 
   Future<Uint8List> _buildPdf() => QrPdfService.build(
         doorLabel: widget.doorLabel,
         qrUrl: widget.qrUrl,
         topText: _topTextController.text,
         bottomText: _bottomTextController.text,
+        sideText: _sideTextController.text,
+        template: _template,
       );
 
   Future<void> _sharePdf() async {
@@ -105,9 +121,16 @@ class _DoorQrScreenState extends State<DoorQrScreen> {
   Widget build(BuildContext context) {
     final topText = _topTextController.text.trim();
     final bottomText = _bottomTextController.text.trim();
+    final sideText = _sideTextController.text.trim();
+    final previewBorder = switch (_template) {
+      QrPdfTemplate.minimal => Border.all(color: AppColors.line),
+      QrPdfTemplate.framed => Border.all(color: AppColors.blue, width: 4),
+      QrPdfTemplate.poster => Border.all(color: AppColors.navy, width: 7),
+    };
+    final previewRadius = _template == QrPdfTemplate.minimal ? 18.0 : 28.0;
 
     return AppShell(
-      title: 'QR • ${widget.doorLabel}',
+      title: context.tr('QR kodu', 'QR code'),
       child: ListView(
         children: [
           ElevCard(
@@ -115,8 +138,8 @@ class _DoorQrScreenState extends State<DoorQrScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  context.tr('PDF için metinleri özelleştir',
-                      'Customize the text for your PDF'),
+                  context.tr(
+                      'QR çıktısını özelleştir', 'Customize your QR output'),
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
                 const SizedBox(height: 6),
@@ -129,29 +152,75 @@ class _DoorQrScreenState extends State<DoorQrScreen> {
                       ),
                 ),
                 const SizedBox(height: 18),
-                TextField(
-                  controller: _topTextController,
-                  maxLength: 120,
-                  textInputAction: TextInputAction.next,
-                  decoration: InputDecoration(
-                    labelText: context.tr(
-                        'QR üstü metin (opsiyonel)', 'Text above QR (optional)'),
-                    hintText: context.tr(
-                        'Örn. XYZ sitesi - B blok', 'e.g. XYZ site - Block B'),
-                  ),
+                Text(context.tr('Şablon', 'Template'),
+                    style: Theme.of(context).textTheme.titleSmall),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _TemplateChoice(
+                      selected: _template == QrPdfTemplate.minimal,
+                      label: context.tr('Sade', 'Minimal'),
+                      icon: Icons.crop_square_rounded,
+                      onTap: () =>
+                          setState(() => _template = QrPdfTemplate.minimal),
+                    ),
+                    _TemplateChoice(
+                      selected: _template == QrPdfTemplate.framed,
+                      label: context.tr('Çerçeveli', 'Framed'),
+                      icon: Icons.filter_frames_rounded,
+                      onTap: () =>
+                          setState(() => _template = QrPdfTemplate.framed),
+                    ),
+                    _TemplateChoice(
+                      selected: _template == QrPdfTemplate.poster,
+                      label: context.tr('Afiş', 'Poster'),
+                      icon: Icons.campaign_outlined,
+                      onTap: () =>
+                          setState(() => _template = QrPdfTemplate.poster),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                Text(
+                    context.tr(
+                        'Hazır kullanım şablonları', 'Ready-to-use presets'),
+                    style: Theme.of(context).textTheme.titleSmall),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _QrTextPreset.values
+                      .map((preset) => _TemplateChoice(
+                            selected: false,
+                            label: preset.labelFor(context),
+                            icon: preset.icon,
+                            onTap: () => _applyPreset(preset),
+                          ))
+                      .toList(),
                 ),
                 const SizedBox(height: 10),
-                TextField(
-                  controller: _bottomTextController,
-                  maxLength: 120,
-                  textInputAction: TextInputAction.done,
-                  decoration: InputDecoration(
-                    labelText: context.tr('QR altı metin (opsiyonel)',
+                _QrTextField(
+                    controller: _topTextController,
+                    label: context.tr('QR üstü metin (opsiyonel)',
+                        'Text above QR (optional)'),
+                    hint: context.tr(
+                        'Örn. XYZ sitesi - B blok', 'e.g. XYZ site - Block B')),
+                const SizedBox(height: 10),
+                _QrTextField(
+                    controller: _bottomTextController,
+                    label: context.tr('QR altı metin (opsiyonel)',
                         'Text below QR (optional)'),
-                    hintText: context.tr('Örn. Daire 6 için taratın',
-                        'e.g. Scan for apartment 6'),
-                  ),
-                ),
+                    hint: context.tr('Örn. Daire 6 için taratın',
+                        'e.g. Scan for apartment 6')),
+                const SizedBox(height: 10),
+                _QrTextField(
+                    controller: _sideTextController,
+                    label: context.tr('QR yanı metin (opsiyonel)',
+                        'Text beside QR (optional)'),
+                    hint: context.tr(
+                        'Örn. Ziyaretçi girişi', 'e.g. Visitor entrance')),
               ],
             ),
           ),
@@ -170,17 +239,44 @@ class _DoorQrScreenState extends State<DoorQrScreen> {
                       style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 12),
                 ],
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: AppColors.line),
+                if (_template == QrPdfTemplate.poster)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                        color: AppColors.navy,
+                        borderRadius: BorderRadius.circular(12)),
+                    child: const Text('DOQR',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            color: Colors.white, fontWeight: FontWeight.w800)),
                   ),
-                  child: QrImageView(
-                      data: widget.qrUrl,
-                      version: QrVersions.auto,
-                      size: 250),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Flexible(
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(previewRadius),
+                          border: previewBorder,
+                        ),
+                        child: QrImageView(
+                            data: widget.qrUrl,
+                            version: QrVersions.auto,
+                            size: sideText.isEmpty ? 250 : 210),
+                      ),
+                    ),
+                    if (sideText.isNotEmpty) ...[
+                      const SizedBox(width: 12),
+                      Flexible(
+                        child: Text(sideText,
+                            style: Theme.of(context).textTheme.titleSmall),
+                      ),
+                    ],
+                  ],
                 ),
                 if (bottomText.isNotEmpty) ...[
                   const SizedBox(height: 12),
@@ -203,8 +299,7 @@ class _DoorQrScreenState extends State<DoorQrScreen> {
                       child: OutlinedButton.icon(
                         onPressed: _isPreparingPdf ? null : _savePdf,
                         icon: const Icon(Icons.download_rounded),
-                        label: Text(context.tr(
-                            'PDF kaydet', 'Save PDF')),
+                        label: Text(context.tr('PDF kaydet', 'Save PDF')),
                       ),
                     ),
                   ],
@@ -213,18 +308,6 @@ class _DoorQrScreenState extends State<DoorQrScreen> {
                   const SizedBox(height: 12),
                   const LinearProgressIndicator(),
                 ],
-                const SizedBox(height: 18),
-                Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(context.tr('QR Linki', 'QR Link'))),
-                const SizedBox(height: 4),
-                SelectableText(widget.qrUrl),
-                const SizedBox(height: 8),
-                Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(context.tr('Token ID', 'Token ID'))),
-                const SizedBox(height: 4),
-                SelectableText(widget.tokenId),
               ],
             ),
           ),
@@ -232,4 +315,104 @@ class _DoorQrScreenState extends State<DoorQrScreen> {
       ),
     );
   }
+}
+
+class _TemplateChoice extends StatelessWidget {
+  final bool selected;
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+  const _TemplateChoice(
+      {required this.selected,
+      required this.label,
+      required this.icon,
+      required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => ChoiceChip(
+        selected: selected,
+        onSelected: (_) => onTap(),
+        avatar: Icon(icon, size: 18),
+        label: Text(label),
+      );
+}
+
+enum _QrTextPreset { apartment, office, accommodation, vehicle }
+
+extension on _QrTextPreset {
+  IconData get icon => switch (this) {
+        _QrTextPreset.apartment => Icons.apartment_rounded,
+        _QrTextPreset.office => Icons.business_rounded,
+        _QrTextPreset.accommodation => Icons.hotel_rounded,
+        _QrTextPreset.vehicle => Icons.directions_car_rounded,
+      };
+
+  QrPdfTemplate get template => switch (this) {
+        _QrTextPreset.apartment => QrPdfTemplate.framed,
+        _QrTextPreset.office => QrPdfTemplate.poster,
+        _QrTextPreset.accommodation => QrPdfTemplate.poster,
+        _QrTextPreset.vehicle => QrPdfTemplate.framed,
+      };
+
+  String labelFor(BuildContext context) => switch (this) {
+        _QrTextPreset.apartment => context.tr('Apartman', 'Apartment'),
+        _QrTextPreset.office => context.tr('Ofis', 'Office'),
+        _QrTextPreset.accommodation => context.tr('Konaklama', 'Accommodation'),
+        _QrTextPreset.vehicle => context.tr('Araç', 'Vehicle'),
+      };
+
+  String topTextFor(BuildContext context) => switch (this) {
+        _QrTextPreset.apartment =>
+          context.tr('Ziyaretçi misiniz?', 'Are you visiting?'),
+        _QrTextPreset.office =>
+          context.tr('Ziyaretçi girişi', 'Visitor entrance'),
+        _QrTextPreset.accommodation =>
+          context.tr('Misafir girişi', 'Guest entrance'),
+        _QrTextPreset.vehicle =>
+          context.tr('Araç sahibiyle iletişim', 'Contact vehicle owner'),
+      };
+
+  String bottomTextFor(BuildContext context) => switch (this) {
+        _QrTextPreset.apartment =>
+          context.tr('Zili çalmak için taratın', 'Scan to ring the bell'),
+        _QrTextPreset.office => context.tr(
+            'Yetkiliye ulaşmak için taratın', 'Scan to reach the host'),
+        _QrTextPreset.accommodation => context.tr(
+            'Ev sahibinize ulaşmak için taratın', 'Scan to reach your host'),
+        _QrTextPreset.vehicle =>
+          context.tr('Bu araç için taratın', 'Scan for this vehicle'),
+      };
+
+  String sideTextFor(BuildContext context) => switch (this) {
+        _QrTextPreset.apartment => context.tr('Kapı zili', 'Doorbell'),
+        _QrTextPreset.office => context.tr('Resepsiyon', 'Reception'),
+        _QrTextPreset.accommodation => context.tr('Konaklama', 'Accommodation'),
+        _QrTextPreset.vehicle =>
+          context.tr('Park / acil durum', 'Parking / urgent'),
+      };
+}
+
+class _QrTextField extends StatelessWidget {
+  final TextEditingController controller;
+  final String label;
+  final String hint;
+  const _QrTextField(
+      {required this.controller, required this.label, required this.hint});
+
+  @override
+  Widget build(BuildContext context) => TextField(
+        controller: controller,
+        maxLength: 120,
+        textInputAction: TextInputAction.next,
+        decoration: InputDecoration(
+          labelText: label,
+          hintText: hint,
+          suffixIcon: controller.text.trim().isEmpty
+              ? null
+              : IconButton(
+                  tooltip: context.tr('Metni kaldır', 'Remove text'),
+                  onPressed: controller.clear,
+                  icon: const Icon(Icons.close_rounded)),
+        ),
+      );
 }

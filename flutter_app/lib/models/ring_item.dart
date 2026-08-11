@@ -29,8 +29,10 @@ class RingItem {
     this.closedAt,
   });
 
-  bool get isActive => status == 'pending' || status == 'accepted';
-  bool get usesMedia => requestedMode == 'audio' || requestedMode == 'video';
+  bool get isActive =>
+      status == 'pending' || status == 'media_requested' || status == 'accepted';
+  String get activeMode => acceptedMode ?? requestedMode;
+  bool get usesMedia => activeMode == 'audio' || activeMode == 'video';
 
   factory RingItem.fromJson(Map<String, dynamic> json) => RingItem(
         id: json['id'] as String,

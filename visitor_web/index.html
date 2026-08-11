@@ -10,8 +10,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="./styles.css?v=20260810">
-  <style>.media-limit{position:absolute;left:20px;top:20px;z-index:2;padding:7px 10px;border-radius:999px;background:rgba(17,25,54,.76);color:#fff;font-size:10px;font-weight:800;font-variant-numeric:tabular-nums;backdrop-filter:blur(9px)}</style>
+  <link rel="stylesheet" href="./styles.css?v=20260811-1">
+  <style>.media-limit{position:absolute;left:20px;top:20px;z-index:2;padding:7px 10px;border-radius:999px;background:rgba(17,25,54,.76);color:#fff;font-size:10px;font-weight:800;font-variant-numeric:tabular-nums;backdrop-filter:blur(9px)}.concise-notice{margin-bottom:16px}.micro a{color:var(--blue);font-weight:800}.media-request h2{margin:6px 0 7px;font-size:20px;line-height:1.25}.media-request p{margin:0;color:var(--muted);font-size:12px;line-height:1.55}.media-request-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:18px}.media-request-actions .button{min-height:49px;padding:11px;font-size:12px}.media-request-actions .button.secondary{margin-top:0}.download-cta{display:inline-block;color:var(--blue);font-weight:800;text-decoration:none}.download-cta:hover{text-decoration:underline}</style>
   <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
 </head>
 <body>
@@ -37,18 +37,12 @@
 
     <section id="consentView" class="card view">
       <span class="eyebrow">Güvenlik bilgilendirmesi</span>
-      <h1>Zili çalmadan önce</h1>
-      <p class="lead">Kötüye kullanımı önlemek ve görüşmeyi kurmak için aşağıdaki veriler işlenir.</p>
-      <ul class="privacy-list">
-        <li><span>01</span><div><strong>Cihaz ve tarayıcı bilgileri</strong><small>Platform, dil, saat dilimi, ekran ölçüsü, dokunma ve donanım kapasitesi.</small></div></li>
-        <li><span>02</span><div><strong>Güvenlik tanımlayıcıları</strong><small>Yerel rastgele cihaz anahtarı ile ağ adresinin sunucuda tuzlu, tek yönlü özetleri. Ham IP saklanmaz.</small></div></li>
-        <li><span>03</span><div><strong>Görüşme kayıtları</strong><small>Zil, mesaj ve güvenlik olayları. Free hostta son 3 ziyaret; Pro hostta en fazla 90 gün.</small></div></li>
-      </ul>
-      <div class="notice"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v5c0 5.2-3.4 8.4-8 10-4.6-1.6-8-4.8-8-10V6l8-3z"/></svg><span>Ses ve görüntü WebRTC ile canlı aktarılır; DOQR tarafından kaydedilmez. Cihaz bilgileri kargo firması veya gerçek kimlik doğrulaması için kullanılmaz.</span></div>
-      <label class="check-row"><input id="consentCheck" type="checkbox"><span>Bilgilendirmeyi okudum ve güvenlik amacıyla veri işlenmesini kabul ediyorum.</span></label>
+      <h1>Güvenli zil oturumu</h1>
+      <p class="lead">Zili çalmak için kısa süreli bir anonim oturum oluşturulur.</p>
+      <div class="notice concise-notice"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v5c0 5.2-3.4 8.4-8 10-4.6-1.6-8-4.8-8-10V6l8-3z"/></svg><span>Cihaz ve güvenlik verileri kötüye kullanımı önlemek için işlenir. Ses/görüntü yalnızca host istediğinizde ve sizin onayınızla canlı aktarılır; DOQR kaydetmez.</span></div>
       <div id="turnstile"></div>
       <button id="continueBtn" class="button primary" type="button" disabled>Devam et <span>→</span></button>
-      <p class="micro">Devam ederek yalnızca bu ziyaret için geçici bir anonim oturum oluşturursunuz.</p>
+      <p class="micro">Devam ederek <a href="https://ciarponec.github.io/DOQR/privacy.html" target="_blank" rel="noopener">Gizlilik Bildirimi</a>'ndeki veri işlemeyi ve geçici oturumu kabul etmiş olursunuz.</p>
     </section>
 
     <section id="setupView" class="card view">
@@ -78,11 +72,6 @@
         <p class="field-note">Bu seçim kendi beyanınızdır. Hazır teslimat notu veya kodu yalnızca host onaylarsa paylaşılır.</p>
       </div>
 
-      <div class="field-group">
-        <label>Nasıl görüşmek istersiniz?</label>
-        <div id="modeGrid" class="mode-grid"></div>
-        <p id="mediaAvailabilityNote" class="field-note hidden"></p>
-      </div>
       <button id="ringBtn" class="button primary" type="button">Zili çal <span>→</span></button>
     </section>
 
@@ -101,14 +90,21 @@
         <div class="media-controls"><button id="muteBtn" type="button" title="Mikrofon">🎙</button><button id="cameraBtn" type="button" title="Kamera">▣</button><button id="hangupBtn" class="hangup" type="button" title="Görüşmeyi bitir">⌕</button></div>
       </div>
 
-      <div class="card chat-card">
+      <div id="mediaRequestCard" class="card media-request hidden">
+        <span class="eyebrow">Görüşme isteği</span>
+        <h2 id="mediaRequestTitle">Host sesli görüşme başlatmak istiyor</h2>
+        <p id="mediaRequestText">Kabul ettiğinizde mikrofon veya kamera izni istenir.</p>
+        <div class="media-request-actions"><button id="declineMediaBtn" class="button secondary" type="button">Mesajlaşmaya devam et</button><button id="acceptMediaBtn" class="button primary" type="button">Kabul et</button></div>
+      </div>
+
+      <div id="chatCard" class="card chat-card">
         <div class="chat-head"><div><span class="eyebrow">Canlı görüşme</span><strong>Mesajlar</strong></div><span id="onlineDot" class="online-dot"></span></div>
         <div id="messages" class="messages" aria-live="polite"><p class="empty-chat">Henüz mesaj yok.</p></div>
         <form id="messageForm" class="composer"><input id="messageInput" maxlength="2000" autocomplete="off" placeholder="Mesaj yazın…"><button type="submit" aria-label="Gönder">↑</button></form>
       </div>
     </section>
   </main>
-  <footer>DOQR • Donanımsız, hızlı ve güvenli dijital zil</footer>
-  <script type="module" src="./app.js?v=20260810-4"></script>
+  <footer>DOQR • Donanımsız, hızlı ve güvenli dijital zil<br><a class="download-cta" href="https://ciarponec.github.io/DOQR/" target="_blank" rel="noopener">Siz de ziyaretçinizi dijitalleştirin — DOQR uygulamasını indirin →</a></footer>
+  <script type="module" src="./app.js?v=20260811-2"></script>
 </body>
 </html>

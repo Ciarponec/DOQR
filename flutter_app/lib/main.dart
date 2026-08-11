@@ -9,6 +9,7 @@ import 'app_config.dart';
 import 'l10n/app_language.dart';
 import 'screens/auth_screen.dart';
 import 'screens/chat_screen.dart';
+import 'screens/demo_screen.dart';
 import 'screens/doors_manage_screen.dart';
 import 'screens/home_screen.dart';
 import 'services/notification_service.dart';
@@ -72,6 +73,7 @@ class _DoqrAppState extends State<DoqrApp> {
               '/': (_) => const AuthGate(),
               '/home': (_) => const HomeScreen(),
               '/doors': (_) => const DoorsManageScreen(),
+              '/demo': (_) => const DemoScreen(),
             },
             onGenerateRoute: (settings) {
               if (settings.name == '/ring') {
@@ -90,10 +92,14 @@ class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    if (Supabase.instance.client.auth.currentSession == null) {
-      return const AuthScreen();
-    }
-    return const HomeScreen();
-  }
+  Widget build(BuildContext context) => StreamBuilder<AuthState>(
+        stream: Supabase.instance.client.auth.onAuthStateChange,
+        initialData: AuthState(
+          AuthChangeEvent.initialSession,
+          Supabase.instance.client.auth.currentSession,
+        ),
+        builder: (context, snapshot) => snapshot.data?.session == null
+            ? const AuthScreen()
+            : const HomeScreen(),
+      );
 }

@@ -12,7 +12,7 @@ let peer;
 let localStream;
 let remoteStream;
 let visitorKind = 'guest';
-let requestedMode = 'text';
+const requestedMode = 'text';
 let captchaToken = null;
 let muted = false;
 let cameraEnabled = true;
@@ -22,6 +22,8 @@ let mediaDeadlineTimer;
 let mediaCountdownTimer;
 let mediaLimitEnding = false;
 const seenMessages = new Set();
+const seenIceCandidateIds = new Set();
+let queuedRemoteCandidates = [];
 
 function show(id) {
   document.querySelectorAll('.view').forEach((view) => view.classList.remove('active'));
@@ -96,10 +98,9 @@ function renderTurnstile(sitekey) {
 }
 
 function updateContinue() {
-  $('continueBtn').disabled = !$('consentCheck').checked || (config?.turnstile_site_key && !captchaToken);
+  $('continueBtn').disabled = Boolean(config?.turnstile_site_key && !captchaToken);
 }
 
-$('consentCheck').addEventListener('change', updateContinue);
 $('continueBtn').addEventListener('click', async () => {
   $('continueBtn').disabled = true;
   $('continueBtn').textContent = 'Güvenli oturum açılıyor…';
@@ -123,7 +124,7 @@ $('continueBtn').addEventListener('click', async () => {
 
 function renderSetup() {
   $('doorLabel').textContent = context.door.label;
-  $('welcomeMessage').textContent = context.door.welcome_message || 'Host ile bağlantı kurmak için bir görüşme seçeneği seçin.';
+  $('welcomeMessage').textContent = context.door.welcome_message || 'Hosta haber vermek için zili çalın.';
   $('nameOptional').textContent = context.door.require_visitor_name ? '(zorunlu)' : '(opsiyonel)';
   const couriers = $('courierSelect');
   context.couriers.forEach(({code, label}) => {
@@ -132,30 +133,6 @@ function renderSetup() {
     option.textContent = label;
     couriers.append(option);
   });
-  const labels = {text: ['✦', 'Yazılı'], audio: ['◖', 'Sesli'], video: ['▣', 'Görüntülü · 1 dk']};
-  const grid = $('modeGrid');
-  grid.replaceChildren();
-  if (!context.modes[requestedMode]) {
-    requestedMode = Object.keys(context.modes).find((mode) => context.modes[mode]);
-  }
-  Object.entries(context.modes).filter(([, enabled]) => enabled).forEach(([mode]) => {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = `mode-button${mode === requestedMode ? ' selected' : ''}`;
-    button.dataset.mode = mode;
-    const icon = document.createElement('b'); icon.textContent = labels[mode][0];
-    const text = document.createElement('span'); text.textContent = labels[mode][1];
-    button.append(icon, text);
-    button.addEventListener('click', () => { requestedMode = mode; grid.querySelectorAll('button').forEach((item) => item.classList.toggle('selected', item === button)); });
-    grid.append(button);
-  });
-  const mediaNote = $('mediaAvailabilityNote');
-  const mediaUnavailable = context.media?.available === false &&
-    ['monthly_limit', 'analytics_unavailable'].includes(context.media?.reason);
-  mediaNote.classList.toggle('hidden', !mediaUnavailable);
-  mediaNote.textContent = context.media?.reason === 'monthly_limit'
-    ? 'Sesli ve görüntülü görüşme aylık altyapı sınırı nedeniyle geçici olarak kapalı.'
-    : 'Sesli ve görüntülü görüşme altyapısı geçici olarak kullanılamıyor.';
 }
 
 $('visitorKinds').addEventListener('click', (event) => {
@@ -174,7 +151,6 @@ $('ringBtn').addEventListener('click', async () => {
   $('ringBtn').disabled = true;
   $('ringBtn').textContent = 'Zil çalıyor…';
   try {
-    if (['audio','video'].includes(requestedMode)) await prepareLocalMedia();
     ring = await functionCall('qr-ring-create', {
       qr_token: qrToken,
       visitor_alias: alias || null,
@@ -209,6 +185,7 @@ async function startSession() {
     .on('postgres_changes', {event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `ring_id=eq.${ring.ring_id}`}, ({new: value}) => appendMessage(value))
     .on('postgres_changes', {event: 'UPDATE', schema: 'public', table: 'rings', filter: `id=eq.${ring.ring_id}`}, ({new: value}) => updateRingState(value))
     .on('postgres_changes', {event: '*', schema: 'public', table: 'webrtc_signals', filter: `ring_id=eq.${ring.ring_id}`}, ({new: value}) => handleSignal(value))
+    .on('postgres_changes', {event: 'INSERT', schema: 'public', table: 'webrtc_ice_candidates', filter: `ring_id=eq.${ring.ring_id}`}, ({new: value}) => { void handleIceCandidate(value); })
     .subscribe((status, error) => {
       $('onlineDot').classList.toggle('offline', status !== 'SUBSCRIBED');
       if (status === 'SUBSCRIBED') resolve();
@@ -218,15 +195,19 @@ async function startSession() {
   (history || []).forEach(appendMessage);
   const {data: signal} = await supabase.from('webrtc_signals').select('ring_id, offer_type, offer_sdp, answer_type, answer_sdp').eq('ring_id', ring.ring_id).maybeSingle();
   if (signal) await handleSignal(signal);
+  const {data: candidates} = await supabase.from('webrtc_ice_candidates')
+    .select('id, sender_role, candidate, sdp_mid, sdp_mline_index')
+    .eq('ring_id', ring.ring_id).order('id');
+  await Promise.all((candidates || []).map(handleIceCandidate));
 }
 
-async function prepareLocalMedia() {
+async function prepareLocalMedia(mode = activeMediaMode()) {
   if (localStream) return localStream;
   if (!navigator.mediaDevices?.getUserMedia) {
     throw new Error('Bu tarayıcı sesli veya görüntülü görüşmeyi desteklemiyor.');
   }
   try {
-    if (requestedMode === 'video') {
+    if (mode === 'video') {
       // Safari/iOS may collapse a combined prompt into microphone-only. Ask
       // for the camera first and verify that a real video track was granted.
       const cameraStream = await navigator.mediaDevices.getUserMedia({
@@ -262,7 +243,7 @@ async function prepareLocalMedia() {
     return localStream;
   } catch (error) {
     if (error?.message?.includes('akışı alınamadı')) throw error;
-    const devices = requestedMode === 'video' ? 'önce kamera, ardından mikrofon' : 'mikrofon';
+    const devices = mode === 'video' ? 'önce kamera, ardından mikrofon' : 'mikrofon';
     throw new Error(`Görüşme için ${devices} izni gerekiyor.`);
   }
 }
@@ -272,22 +253,49 @@ function releaseLocalMedia() {
   localStream = null;
 }
 
+function activeMediaMode() {
+  const mode = ring?.accepted_mode || ring?.requested_mode;
+  return ['audio', 'video'].includes(mode) ? mode : null;
+}
+
+function mediaModeLabel(mode) {
+  return mode === 'video' ? 'görüntülü görüşme' : 'sesli görüşme';
+}
+
 function updateRingState(value) {
   ring = {...ring, ...value};
-  const accepted = value.status === 'accepted';
+  const accepted = ring.status === 'accepted';
+  const mediaRequested = ring.status === 'media_requested';
+  const mediaMode = activeMediaMode();
   $('pulse').classList.toggle('connected', accepted);
-  $('sessionEyebrow').textContent = accepted ? 'Bağlandı' : 'Zil durumu';
-  $('sessionTitle').textContent = accepted ? (requestedMode === 'text' ? 'Host yanıtladı' : 'Görüşme başlıyor') : ({declined:'Host şu anda müsait değil', missed:'Zil cevapsız kaldı', cancelled:'Ziyaret iptal edildi', ended:'Görüşme sona erdi'}[value.status] || 'Host bekleniyor');
-  $('sessionSubtitle').textContent = accepted ? 'Güvenli oturum aktif.' : 'Bu sayfayı açık tutabilirsiniz.';
-  if (accepted) void loadPersistentOffer();
-  if (['declined','missed','cancelled','ended'].includes(value.status)) {
+  $('sessionEyebrow').textContent = accepted ? 'Bağlandı' : mediaRequested ? 'Görüşme isteği' : 'Zil durumu';
+  $('sessionTitle').textContent = accepted
+    ? (mediaMode ? 'Görüşme başlıyor' : 'Host yanıtladı')
+    : mediaRequested
+      ? `Host ${mediaModeLabel(mediaMode)} başlatmak istiyor`
+      : ({declined:'Host şu anda müsait değil', missed:'Zil cevapsız kaldı', cancelled:'Ziyaret iptal edildi', ended:'Görüşme sona erdi'}[ring.status] || 'Host bekleniyor');
+  $('sessionSubtitle').textContent = mediaRequested
+    ? 'Kabul etmeden mikrofon veya kamera açılmaz.'
+    : accepted ? 'Güvenli oturum aktif.' : 'Bu sayfayı açık tutabilirsiniz.';
+  $('mediaRequestCard').classList.toggle('hidden', !mediaRequested);
+  $('chatCard').classList.toggle('hidden', !['pending', 'media_requested', 'accepted'].includes(ring.status));
+  if (mediaRequested) {
+    const label = mediaModeLabel(mediaMode);
+    $('mediaRequestTitle').textContent = `Host ${label} başlatmak istiyor`;
+    $('mediaRequestText').textContent = mediaMode === 'video'
+      ? 'Kabul ettiğinizde kamera ve mikrofon izni istenir.'
+      : 'Kabul ettiğinizde mikrofon izni istenir.';
+  }
+  if (accepted && mediaMode) void loadPersistentOffer();
+  if (['declined','missed','cancelled','ended'].includes(ring.status)) {
     $('cancelBtn').classList.add('hidden');
+    $('mediaRequestCard').classList.add('hidden');
     closeMedia(false);
   }
 }
 
 async function loadPersistentOffer() {
-  if (remoteDescriptionSet || !ring || !['audio','video'].includes(requestedMode)) return;
+  if (remoteDescriptionSet || !ring || !activeMediaMode()) return;
   const {data, error} = await supabase.from('webrtc_signals')
     .select('ring_id, offer_type, offer_sdp, answer_type, answer_sdp')
     .eq('ring_id', ring.ring_id)
@@ -309,7 +317,7 @@ function appendMessage(message) {
 $('messageForm').addEventListener('submit', async (event) => {
   event.preventDefault();
   const text = $('messageInput').value.trim();
-  if (!text || !ring) return;
+  if (!text || !ring || !['pending', 'media_requested', 'accepted'].includes(ring.status)) return;
   $('messageInput').value = '';
   try {
     await functionCall('visitor-chat-send', {ring_id: ring.ring_id, message_text: text, client_message_id: crypto.randomUUID?.()});
@@ -319,23 +327,32 @@ $('messageForm').addEventListener('submit', async (event) => {
   }
 });
 
-$('cancelBtn').addEventListener('click', () => ringAction(ring?.status === 'accepted' ? 'end' : 'cancel'));
+$('cancelBtn').addEventListener('click', () => {
+  const action = ring?.status === 'accepted'
+    ? 'end'
+    : ring?.status === 'media_requested'
+      ? 'decline_media'
+      : 'cancel';
+  void ringAction(action);
+});
 $('hangupBtn').addEventListener('click', () => ringAction('end'));
-async function ringAction(action) {
+$('acceptMediaBtn').addEventListener('click', () => ringAction('accept_media'));
+$('declineMediaBtn').addEventListener('click', () => ringAction('decline_media'));
+async function ringAction(action, mode = null) {
   if (!ring) return;
-  try { await functionCall('ring-action', {ring_id: ring.ring_id, action}); } catch (error) { alert(error.message); }
+  try { await functionCall('ring-action', {ring_id: ring.ring_id, action, mode}); } catch (error) { alert(error.message); }
 }
 
 async function handleSignal(signal) {
-  if (offerHandling || remoteDescriptionSet || !signal?.offer_sdp || !['audio','video'].includes(requestedMode)) return;
+  if (offerHandling || remoteDescriptionSet || !signal?.offer_sdp || !activeMediaMode()) return;
   offerHandling = true;
   try {
     if (!peer) await createMediaPeer();
     await peer.setRemoteDescription({type: signal.offer_type || 'offer', sdp: signal.offer_sdp});
     remoteDescriptionSet = true;
+    await flushQueuedRemoteCandidates();
     const answer = await peer.createAnswer();
     await peer.setLocalDescription(answer);
-    await waitForIceGathering(peer);
     const completeAnswer = peer.localDescription;
     const {error} = await supabase.from('webrtc_signals').update({
       answer_type: completeAnswer.type || 'answer',
@@ -352,42 +369,60 @@ async function handleSignal(signal) {
 
 async function createMediaPeer() {
   const rtc = await functionCall('rtc-config', {ring_id: ring.ring_id});
+  const mode = activeMediaMode();
   scheduleMediaDeadline(rtc.media_deadline);
   peer = new RTCPeerConnection({iceServers: rtc.ice_servers});
+  peer.onicecandidate = ({candidate}) => {
+    if (!candidate?.candidate) return;
+    void supabase.from('webrtc_ice_candidates').insert({
+      ring_id: ring.ring_id,
+      sender_role: 'visitor',
+      candidate: candidate.candidate,
+      sdp_mid: candidate.sdpMid,
+      sdp_mline_index: candidate.sdpMLineIndex,
+    });
+  };
   peer.ontrack = ({track, streams}) => {
     remoteStream = streams[0] || remoteStream || new MediaStream();
     if (!streams[0] && !remoteStream.getTracks().some((item) => item.id === track.id)) remoteStream.addTrack(track);
     $('remoteVideo').srcObject = remoteStream;
   };
   peer.onconnectionstatechange = () => { $('connectionLabel').textContent = peer.connectionState === 'connected' ? 'Bağlandı' : 'Bağlanıyor…'; };
-  await prepareLocalMedia();
+  await prepareLocalMedia(mode);
   localStream.getTracks().forEach((track) => peer.addTrack(track, localStream));
   $('localVideo').srcObject = localStream;
   $('mediaCard').classList.remove('hidden');
-  $('audioState').classList.toggle('hidden', requestedMode !== 'audio');
-  $('remoteVideo').classList.toggle('hidden', requestedMode !== 'video');
-  $('localVideo').classList.toggle('hidden', requestedMode !== 'video');
-  $('cameraBtn').classList.toggle('hidden', requestedMode !== 'video');
+  $('audioState').classList.toggle('hidden', mode !== 'audio');
+  $('remoteVideo').classList.toggle('hidden', mode !== 'video');
+  $('localVideo').classList.toggle('hidden', mode !== 'video');
+  $('cameraBtn').classList.toggle('hidden', mode !== 'video');
 }
 
-function waitForIceGathering(connection, timeoutMs = 10000) {
-  if (connection.iceGatheringState === 'complete') return Promise.resolve();
-  return new Promise((resolve) => {
-    const done = () => {
-      connection.removeEventListener('icegatheringstatechange', changed);
-      clearTimeout(timer);
-      resolve();
-    };
-    const changed = () => {
-      if (connection.iceGatheringState === 'complete') done();
-    };
-    const timer = setTimeout(done, timeoutMs);
-    connection.addEventListener('icegatheringstatechange', changed);
-  });
+async function handleIceCandidate(value) {
+  if (value?.sender_role !== 'host' || !value?.candidate) return;
+  const id = Number(value.id);
+  if (!Number.isFinite(id) || seenIceCandidateIds.has(id)) return;
+  seenIceCandidateIds.add(id);
+  const candidate = {
+    candidate: value.candidate,
+    sdpMid: value.sdp_mid ?? null,
+    sdpMLineIndex: value.sdp_mline_index ?? null,
+  };
+  if (!peer || !remoteDescriptionSet) {
+    queuedRemoteCandidates.push(candidate);
+    return;
+  }
+  await peer.addIceCandidate(candidate);
+}
+
+async function flushQueuedRemoteCandidates() {
+  const candidates = queuedRemoteCandidates;
+  queuedRemoteCandidates = [];
+  for (const candidate of candidates) await peer.addIceCandidate(candidate);
 }
 
 function scheduleMediaDeadline(value) {
-  if (requestedMode !== 'video') return;
+  if (activeMediaMode() !== 'video') return;
   clearMediaDeadline();
   const parsed = Date.parse(value);
   const deadline = Number.isFinite(parsed) ? parsed : Date.now() + 60000;
@@ -428,6 +463,8 @@ async function closeMedia(notify = true) {
   remoteStream = null;
   remoteDescriptionSet = false;
   offerHandling = false;
+  queuedRemoteCandidates = [];
+  seenIceCandidateIds.clear();
   $('mediaCard').classList.add('hidden');
 }
 

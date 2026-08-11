@@ -32,20 +32,21 @@ Deno.serve(async (req) => {
     const { data: ring, error } = await admin
       .from("rings")
       .select(
-        "id, door_id, visitor_user_id, requested_mode, status, answered_at, session_expires_at",
+        "id, door_id, visitor_user_id, requested_mode, accepted_mode, status, answered_at, session_expires_at",
       )
       .eq("id", ringId)
       .maybeSingle();
     if (error) throw new Error(error.message);
     if (!ring) throw new HttpError(404, "Ziyaret bulunamadı", "RING_NOT_FOUND");
-    if (!["audio", "video"].includes(ring.requested_mode)) {
+    const mediaMode = ring.accepted_mode ?? ring.requested_mode;
+    if (!["audio", "video"].includes(mediaMode)) {
       throw new HttpError(
         400,
         "Bu oturum medya görüşmesi değil",
         "MEDIA_NOT_AVAILABLE",
       );
     }
-    if (ring.status === "pending") {
+    if (["pending", "media_requested"].includes(ring.status)) {
       throw new HttpError(
         409,
         "Host görüşmeyi henüz yanıtlamadı",
@@ -88,7 +89,7 @@ Deno.serve(async (req) => {
     let mediaDeadline: string | null = null;
     let maxSessionSeconds: number | null = null;
     let credentialTtlLimit: number | undefined;
-    if (ring.requested_mode === "video") {
+    if (mediaMode === "video") {
       if (!ring.answered_at) {
         throw new HttpError(409, "Görüşme henüz başlamadı", "RING_NOT_READY");
       }

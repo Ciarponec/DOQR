@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../l10n/app_language.dart';
 import '../models/door_item.dart';
@@ -9,7 +8,7 @@ import '../models/ring_item.dart';
 import '../services/notification_service.dart';
 import '../services/providers.dart';
 import '../widgets/app_shell.dart';
-import 'plans_screen.dart';
+import 'settings_screen.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -21,6 +20,7 @@ class HomeScreen extends ConsumerStatefulWidget {
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   late Future<_HomeData> _future;
   Locale? _registeredLocale;
+  PlanItem? _accountPlan;
 
   @override
   void initState() {
@@ -44,8 +44,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Future<_HomeData> _load() async {
     final api = ref.read(doqrApiProvider);
     final results = await Future.wait([api.listDoors(), api.listRings()]);
-    return _HomeData(
+    final data = _HomeData(
         results[0] as DoorListResult, results[1] as List<RingItem>);
+    _accountPlan = data.doors.accountPlan;
+    return data;
+  }
+
+  String _homeTitle(BuildContext context) {
+    final plan = _accountPlan;
+    if (plan == null) return 'DOQR';
+    if (plan.isTrial) {
+      final endsAt = plan.trialEndsAt ?? plan.currentPeriodEnd;
+      final days = endsAt == null
+          ? 3
+          : ((endsAt.difference(DateTime.now()).inHours + 23) ~/ 24)
+              .clamp(0, 999);
+      return context.isEnglish ? 'DOQR (Pro • $days days)' : 'DOQR (Pro • $days gün)';
+    }
+    return plan.isPro ? 'DOQR (Pro)' : 'DOQR (Free)';
   }
 
   Future<void> _refresh() async {
@@ -128,41 +144,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   Widget build(BuildContext context) => AppShell(
-        title: 'DOQR',
+        title: _homeTitle(context),
         actions: [
-          PopupMenuButton<String>(
-            tooltip: context.tr('Hesap ve gizlilik', 'Account and privacy'),
-            onSelected: (value) async {
-              if (value == 'privacy') {
-                final privacyUrl = Uri.parse(context.isEnglish
-                    ? 'https://ciarponec.github.io/DOQR/privacy-en.html'
-                    : 'https://ciarponec.github.io/DOQR/privacy.html');
-                await launchUrl(privacyUrl,
-                    mode: LaunchMode.externalApplication);
-              } else if (value == 'delete') {
-                await _deleteAccount();
-              }
-            },
-            itemBuilder: (_) => [
-              PopupMenuItem(
-                value: 'privacy',
-                child: ListTile(
-                  leading: const Icon(Icons.privacy_tip_outlined),
-                  title:
-                      Text(context.tr('Gizlilik politikası', 'Privacy policy')),
-                  contentPadding: EdgeInsets.zero,
-                ),
-              ),
-              PopupMenuItem(
-                value: 'delete',
-                child: ListTile(
-                  leading: const Icon(Icons.delete_forever_outlined,
-                      color: Color(0xFFE54867)),
-                  title: Text(context.tr('Hesabımı sil', 'Delete my account')),
-                  contentPadding: EdgeInsets.zero,
-                ),
-              ),
-            ],
+          IconButton(
+            tooltip: context.tr('Ayarlar', 'Settings'),
+            onPressed: _accountPlan == null
+                ? null
+                : () async {
+                    final changed = await Navigator.push<bool>(
+                      context,
+                      MaterialPageRoute<bool>(
+                        builder: (_) => SettingsScreen(
+                          plan: _accountPlan!,
+                          onDeleteAccount: _deleteAccount,
+                        ),
+                      ),
+                    );
+                    if (changed == true && mounted) await _refresh();
+                  },
+            icon: const Icon(Icons.settings_outlined),
           ),
           IconButton(
             tooltip: context.tr('Çıkış yap', 'Sign out'),
@@ -191,21 +191,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 children: [
-                  _PlanHeader(
-                    plan: data.doors.accountPlan,
-                    onTap: () async {
-                      final changed = await Navigator.push<bool>(
-                        context,
-                        MaterialPageRoute<bool>(
-                          builder: (_) => PlansScreen(
-                            currentPlan: data.doors.accountPlan,
-                          ),
-                        ),
-                      );
-                      if (changed == true && mounted) await _refresh();
-                    },
-                  ),
-                  const SizedBox(height: 16),
                   FilledButton.icon(
                     onPressed: () async {
                       await Navigator.pushNamed(context, '/doors');
@@ -278,6 +263,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       );
 }
 
+// Retained only to preserve the old widget during the current source transition.
+// The home screen no longer renders this plan summary.
+// ignore: unused_element
 class _PlanHeader extends StatelessWidget {
   final PlanItem plan;
   final VoidCallback onTap;
@@ -362,7 +350,7 @@ class _RingCard extends StatelessWidget {
   final VoidCallback onTap;
   const _RingCard({required this.ring, required this.onTap, this.doorLabel});
 
-  IconData get icon => switch (ring.requestedMode) {
+  IconData get icon => switch (ring.activeMode) {
         'video' => Icons.videocam_rounded,
         'audio' => Icons.call_rounded,
         _ => Icons.chat_bubble_rounded,
@@ -390,6 +378,8 @@ class _RingCard extends StatelessWidget {
 
   String _status(BuildContext context, String status) => switch (status) {
         'pending' => context.tr('Bekliyor', 'Pending'),
+        'media_requested' =>
+          context.tr('Onay bekleniyor', 'Awaiting approval'),
         'accepted' => context.tr('Yanıtlandı', 'Accepted'),
         'declined' => context.tr('Reddedildi', 'Declined'),
         'missed' => context.tr('Cevapsız', 'Missed'),

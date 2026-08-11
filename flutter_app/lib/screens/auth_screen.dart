@@ -17,6 +17,7 @@ class _AuthScreenState extends State<AuthScreen> {
   final password = TextEditingController();
   bool loading = false;
   bool obscure = true;
+  bool createMode = false;
   String? error;
   String? info;
 
@@ -27,12 +28,17 @@ class _AuthScreenState extends State<AuthScreen> {
     super.dispose();
   }
 
-  Future<void> _submit({required bool create}) async {
+  Future<void> _submit() async {
+    final create = createMode;
     final mail = email.text.trim();
     final secret = password.text;
     if (mail.isEmpty || secret.isEmpty) {
       return setState(() => error = context.tr(
           'E-posta ve şifre gerekli.', 'Email and password are required.'));
+    }
+    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(mail)) {
+      return setState(() => error = context.tr(
+          'Geçerli bir e-posta adresi gir.', 'Enter a valid email address.'));
     }
     if (create && secret.length < 8) {
       return setState(() => error = context.tr('Şifre en az 8 karakter olmalı.',
@@ -123,51 +129,116 @@ class _AuthScreenState extends State<AuthScreen> {
                           .bodyLarge
                           ?.copyWith(color: const Color(0xFFBFCBF1)),
                     ),
-                    const SizedBox(height: 32),
+                    const SizedBox(height: 18),
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: [
+                        ChoiceChip(
+                          selected: !createMode,
+                          label: Text(context.tr('Giriş yap', 'Sign in')),
+                          onSelected: loading
+                              ? null
+                              : (_) => setState(() {
+                                    createMode = false;
+                                    error = null;
+                                    info = null;
+                                  }),
+                        ),
+                        ChoiceChip(
+                          selected: createMode,
+                          label: Text(
+                              context.tr('Hesap oluştur', 'Create account')),
+                          onSelected: loading
+                              ? null
+                              : (_) => setState(() {
+                                    createMode = true;
+                                    error = null;
+                                    info = null;
+                                  }),
+                        ),
+                        TextButton.icon(
+                          style: TextButton.styleFrom(
+                              foregroundColor: Colors.white),
+                          onPressed: loading
+                              ? null
+                              : () => Navigator.of(context).pushNamed('/demo'),
+                          icon: const Icon(Icons.play_circle_outline_rounded),
+                          label: Text(context.tr(
+                              'Kayıt olmadan dene', 'Try without an account')),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
                     ElevCard(
                       padding: const EdgeInsets.all(22),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Text(context.tr('Host hesabı', 'Host account'),
+                          Text(
+                              createMode
+                                  ? context.tr('Ücretsiz hesap oluştur',
+                                      'Create a free account')
+                                  : context.tr('Host hesabına giriş yap',
+                                      'Sign in to your host account'),
                               style: Theme.of(context).textTheme.headlineSmall),
                           const SizedBox(height: 5),
                           Text(
                               context.tr(
-                                  'Dijital zilini yönetmek için devam et.',
-                                  'Continue to manage your digital doorbell.'),
+                                  createMode
+                                      ? 'Dijital zilini oluştur, ilk 3 gün Pro özelliklerini dene.'
+                                      : 'Dijital zilini ve gelen ziyaretçileri yönet.',
+                                  createMode
+                                      ? 'Create your doorbell and try Pro features for the first 3 days.'
+                                      : 'Manage your doorbell and incoming visitors.'),
                               style: Theme.of(context)
                                   .textTheme
                                   .bodyMedium
                                   ?.copyWith(color: AppColors.muted)),
                           const SizedBox(height: 20),
-                          TextField(
-                            controller: email,
-                            keyboardType: TextInputType.emailAddress,
-                            autofillHints: const [AutofillHints.email],
-                            decoration: InputDecoration(
-                                labelText: context.tr('E-posta', 'Email'),
-                                prefixIcon:
-                                    const Icon(Icons.alternate_email_rounded)),
-                          ),
-                          const SizedBox(height: 12),
-                          TextField(
-                            controller: password,
-                            obscureText: obscure,
-                            autofillHints: const [AutofillHints.password],
-                            onSubmitted: (_) =>
-                                loading ? null : _submit(create: false),
-                            decoration: InputDecoration(
-                              labelText: context.tr('Şifre', 'Password'),
-                              prefixIcon:
-                                  const Icon(Icons.lock_outline_rounded),
-                              suffixIcon: IconButton(
-                                onPressed: () =>
-                                    setState(() => obscure = !obscure),
-                                icon: Icon(obscure
-                                    ? Icons.visibility_outlined
-                                    : Icons.visibility_off_outlined),
-                              ),
+                          AutofillGroup(
+                            child: Column(
+                              children: [
+                                TextField(
+                                  controller: email,
+                                  keyboardType: TextInputType.emailAddress,
+                                  textInputAction: TextInputAction.next,
+                                  autofillHints: const [AutofillHints.email],
+                                  decoration: InputDecoration(
+                                      labelText: context.tr('E-posta', 'Email'),
+                                      prefixIcon: const Icon(
+                                          Icons.alternate_email_rounded)),
+                                ),
+                                const SizedBox(height: 12),
+                                TextField(
+                                  controller: password,
+                                  obscureText: obscure,
+                                  autofillHints: [
+                                    createMode
+                                        ? AutofillHints.newPassword
+                                        : AutofillHints.password,
+                                  ],
+                                  onSubmitted: (_) =>
+                                      loading ? null : _submit(),
+                                  decoration: InputDecoration(
+                                    labelText: context.tr('Şifre', 'Password'),
+                                    helperText: createMode
+                                        ? context.tr('En az 8 karakter.',
+                                            'At least 8 characters.')
+                                        : null,
+                                    prefixIcon:
+                                        const Icon(Icons.lock_outline_rounded),
+                                    suffixIcon: IconButton(
+                                      onPressed: () =>
+                                          setState(() => obscure = !obscure),
+                                      icon: Icon(obscure
+                                          ? Icons.visibility_outlined
+                                          : Icons.visibility_off_outlined),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                           if (info != null)
@@ -176,22 +247,18 @@ class _AuthScreenState extends State<AuthScreen> {
                             _Message(text: error!, color: AppColors.danger),
                           const SizedBox(height: 18),
                           FilledButton(
-                            onPressed:
-                                loading ? null : () => _submit(create: false),
+                            onPressed: loading ? null : _submit,
                             child: loading
                                 ? const SizedBox(
                                     width: 22,
                                     height: 22,
                                     child: CircularProgressIndicator(
                                         strokeWidth: 2.5, color: Colors.white))
-                                : Text(context.tr('Giriş yap', 'Sign in')),
+                                : Text(createMode
+                                    ? context.tr(
+                                        'Hesabı oluştur', 'Create account')
+                                    : context.tr('Giriş yap', 'Sign in')),
                           ),
-                          const SizedBox(height: 10),
-                          OutlinedButton(
-                              onPressed:
-                                  loading ? null : () => _submit(create: true),
-                              child: Text(context.tr('Ücretsiz hesap oluştur',
-                                  'Create a free account'))),
                         ],
                       ),
                     ),

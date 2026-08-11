@@ -32,12 +32,8 @@ class _CourierNotesScreenState extends ConsumerState<CourierNotesScreen> {
   }
 
   Future<void> _edit([CourierNoteItem? note]) async {
-    final code =
-        TextEditingController(text: note?.courierCode ?? 'hepsiburada');
-    final label =
+    final courier =
         TextEditingController(text: note?.courierLabel ?? 'Hepsiburada');
-    final title = TextEditingController(
-        text: note?.title ?? context.tr('Teslimat notu', 'Delivery note'));
     final message = TextEditingController(
         text: note?.message ??
             context.tr(
@@ -58,22 +54,13 @@ class _CourierNotesScreenState extends ConsumerState<CourierNotesScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   TextField(
-                      controller: label,
-                      decoration: InputDecoration(
-                          labelText:
-                              context.tr('Kurye şirketi', 'Courier company'))),
-                  const SizedBox(height: 10),
-                  TextField(
-                      controller: code,
+                      controller: courier,
                       decoration: InputDecoration(
                           labelText: context.tr(
-                              'Eşleşme kodu (örn. hepsiburada)',
-                              'Matching code (e.g. hepsiburada)'))),
-                  const SizedBox(height: 10),
-                  TextField(
-                      controller: title,
-                      decoration: InputDecoration(
-                          labelText: context.tr('Başlık', 'Title'))),
+                              'Kurye şirketi', 'Courier company'),
+                          helperText: context.tr(
+                              'Ziyaretçi aynı şirketi seçtiğinde bu not hosta önerilir.',
+                              'When the visitor selects this company, this note is offered to the host.'))),
                   const SizedBox(height: 10),
                   TextField(
                       controller: message,
@@ -81,7 +68,7 @@ class _CourierNotesScreenState extends ConsumerState<CourierNotesScreen> {
                       minLines: 2,
                       maxLines: 4,
                       decoration: InputDecoration(
-                          labelText: context.tr('Mesaj', 'Message'))),
+                          labelText: context.tr('Teslimat notu', 'Delivery note'))),
                   const SizedBox(height: 10),
                   TextField(
                       controller: delivery,
@@ -112,18 +99,18 @@ class _CourierNotesScreenState extends ConsumerState<CourierNotesScreen> {
         ),
       ),
     );
-    if (save != true) return;
+    if (save != true || !mounted) return;
+    final courierLabel = courier.text.trim();
+    final noteText = message.text.trim();
+    if (courierLabel.isEmpty || noteText.isEmpty) return;
     try {
       await ref.read(doqrApiProvider).saveCourierNote(
             doorId: widget.door.id,
             id: note?.id,
-            courierCode: code.text
-                .trim()
-                .toLowerCase()
-                .replaceAll(RegExp(r'[^a-z0-9_-]'), '-'),
-            courierLabel: label.text.trim(),
-            title: title.text.trim(),
-            message: message.text.trim(),
+            courierCode: _matchingCode(courierLabel),
+            courierLabel: courierLabel,
+            title: '$courierLabel ${context.tr('teslimat notu', 'delivery note')}',
+            message: noteText,
             deliveryCode:
                 delivery.text.trim().isEmpty ? null : delivery.text.trim(),
             isActive: active,
@@ -135,6 +122,20 @@ class _CourierNotesScreenState extends ConsumerState<CourierNotesScreen> {
             .showSnackBar(SnackBar(content: Text(error.toString())));
       }
     }
+  }
+
+  String _matchingCode(String value) {
+    final normalized = value
+        .toLowerCase()
+        .replaceAll('ı', 'i')
+        .replaceAll('ş', 's')
+        .replaceAll('ğ', 'g')
+        .replaceAll('ü', 'u')
+        .replaceAll('ö', 'o')
+        .replaceAll('ç', 'c')
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '-');
+    final compact = normalized.replaceAll(RegExp(r'^-+|-+$'), '');
+    return compact.length >= 2 ? compact : 'kurye';
   }
 
   @override
@@ -155,8 +156,8 @@ class _CourierNotesScreenState extends ConsumerState<CourierNotesScreen> {
                 ElevCard(
                   child: Text(
                       context.tr(
-                          'Yalnızca QR’ı tararken bu kurye şirketini seçen ziyaretçi ilgili notu ve teslimat kodunu görür.',
-                          'Only visitors who select this courier company while scanning the QR code will see the related note and delivery code.'),
+                          'Ziyaretçi bu kurye şirketini seçerse not otomatik mesaj olarak gider. Teslimat kodu varsa host ayrıca paylaşır.',
+                          'When a visitor selects this courier company, the host gets a “Share note” option. The note and delivery code are sent only after the host approves.'),
                       style: Theme.of(context).textTheme.bodyMedium),
                 ),
                 const SizedBox(height: 12),

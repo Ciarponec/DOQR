@@ -8,6 +8,7 @@ import {
   requirePermanentUser,
   serviceClient,
 } from "../_shared/utils.ts";
+import { getOwnerPlan, requireFeature } from "../_shared/plans.ts";
 
 Deno.serve(async (req) => {
   const preflight = options(req);
@@ -36,6 +37,7 @@ Deno.serve(async (req) => {
           "FORBIDDEN",
         );
       }
+      requireFeature(await getOwnerPlan(admin, user.id), "visitor_blocking");
       const now = new Date().toISOString();
       const { data, error } = await admin.from("door_blocks")
         .select("id, block_type, reason, expires_at, created_at")
@@ -66,6 +68,7 @@ Deno.serve(async (req) => {
           "FORBIDDEN",
         );
       }
+      requireFeature(await getOwnerPlan(admin, user.id), "visitor_blocking");
       const { error } = await admin.from("door_blocks").delete()
         .eq("id", blockId)
         .eq("door_id", doorId);
@@ -116,6 +119,7 @@ Deno.serve(async (req) => {
         "FORBIDDEN",
       );
     }
+    requireFeature(await getOwnerPlan(admin, user.id), "visitor_blocking");
 
     const rows = [];
     if (["device", "both"].includes(scope)) {

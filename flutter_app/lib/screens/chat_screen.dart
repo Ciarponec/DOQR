@@ -6,11 +6,13 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 
 import '../l10n/app_language.dart';
 import '../models/chat_message_item.dart';
+import '../models/door_item.dart';
 import '../models/ring_item.dart';
 import '../services/media_session.dart';
 import '../services/providers.dart';
 import '../ui/app_theme.dart';
 import '../widgets/app_shell.dart';
+import '../widgets/closed_session_notice.dart';
 
 class RingSessionScreen extends ConsumerStatefulWidget {
   final String ringId;
@@ -23,6 +25,7 @@ class RingSessionScreen extends ConsumerStatefulWidget {
 class _RingSessionScreenState extends ConsumerState<RingSessionScreen> {
   final input = TextEditingController();
   RingItem? ring;
+  PlanItem? _doorPlan;
   Object? loadError;
   bool busy = false;
   StreamSubscription<List<RingItem>>? ringSubscription;
@@ -38,8 +41,17 @@ class _RingSessionScreenState extends ConsumerState<RingSessionScreen> {
     try {
       final api = ref.read(doqrApiProvider);
       final item = await api.getRing(widget.ringId);
+      final doors = await api.listDoors();
+      final plan = doors.doors
+              .where((door) => door.id == item.doorId)
+              .firstOrNull
+              ?.plan ??
+          doors.accountPlan;
       if (!mounted) return;
-      setState(() => ring = item);
+      setState(() {
+        ring = item;
+        _doorPlan = plan;
+      });
       _ensureMedia(item);
       ringSubscription = api.watchRing(widget.ringId).listen((items) {
         if (!mounted || items.isEmpty) return;
@@ -66,7 +78,7 @@ class _RingSessionScreenState extends ConsumerState<RingSessionScreen> {
       client: ref.read(supabaseProvider),
       api: ref.read(doqrApiProvider),
       ringId: item.id,
-      video: item.requestedMode == 'video',
+      video: item.activeMode == 'video',
       onSessionLimitReached: _endForSessionLimit,
     )..addListener(_mediaChanged);
     media!.startAsHost();
@@ -85,12 +97,12 @@ class _RingSessionScreenState extends ConsumerState<RingSessionScreen> {
     await _action('end');
   }
 
-  Future<void> _action(String action) async {
+  Future<void> _action(String action, {String? mode}) async {
     setState(() => busy = true);
     try {
       final updated = await ref
           .read(doqrApiProvider)
-          .ringAction(ringId: widget.ringId, action: action);
+          .ringAction(ringId: widget.ringId, action: action, mode: mode);
       if (mounted) {
         setState(() => ring = updated);
         _ensureMedia(updated);
@@ -107,6 +119,7 @@ class _RingSessionScreenState extends ConsumerState<RingSessionScreen> {
   }
 
   Future<void> _send() async {
+    if (ring?.isActive != true) return;
     final text = input.text.trim();
     if (text.isEmpty) return;
     input.clear();
@@ -123,7 +136,61 @@ class _RingSessionScreenState extends ConsumerState<RingSessionScreen> {
     }
   }
 
-  Future<void> _shareCourierNote() async {
+  Future<void> _showAnswerOptions() async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.white,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(context.tr('Nasıl yanıtlamak istersiniz?',
+                  'How would you like to answer?'),
+                  style: Theme.of(context).textTheme.headlineSmall),
+              const SizedBox(height: 8),
+              Text(
+                context.tr(
+                    'Sesli veya görüntülü görüşmede ziyaretçiden önce onay istenir.',
+                    'For voice or video, the visitor is asked for approval first.'),
+                style: Theme.of(context)
+                    .textTheme
+                    .bodyMedium
+                    ?.copyWith(color: AppColors.muted),
+              ),
+              const SizedBox(height: 18),
+              FilledButton.icon(
+                onPressed: () => Navigator.pop(context, 'text'),
+                icon: const Icon(Icons.chat_bubble_rounded),
+                label: Text(context.tr('Mesajlaşmayla yanıtla', 'Answer by chat')),
+              ),
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed: () => Navigator.pop(context, 'audio'),
+                icon: const Icon(Icons.call_rounded),
+                label: Text(context.tr('Sesli görüşme iste', 'Request voice call')),
+              ),
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed: () => Navigator.pop(context, 'video'),
+                icon: const Icon(Icons.videocam_rounded),
+                label: Text(context.tr('Görüntülü görüşme iste',
+                    'Request video call')),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (choice == null) return;
+    await _action(choice == 'text' ? 'accept' : 'request_media',
+        mode: choice == 'text' ? null : choice);
+  }
+
+  Future<void> _shareCourierCode() async {
     setState(() => busy = true);
     try {
       await ref
@@ -132,8 +199,8 @@ class _RingSessionScreenState extends ConsumerState<RingSessionScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text(context.tr(
-                'Hazır kurye notu bu ziyaretçiyle paylaşıldı.',
-                'The saved courier note was shared with this visitor.'))));
+                'Teslimat kodu bu ziyaretçiyle paylaşıldı.',
+                'The delivery code was shared with this visitor.'))));
       }
     } catch (error) {
       if (mounted) {
@@ -292,16 +359,18 @@ class _RingSessionScreenState extends ConsumerState<RingSessionScreen> {
             tooltip: context.tr('Güvenlik bilgileri', 'Security information'),
             onPressed: _showSecurityInfo,
             icon: const Icon(Icons.shield_outlined)),
-        PopupMenuButton<String>(
-          onSelected: (value) {
-            if (value == 'block') _blockVisitor();
-          },
-          itemBuilder: (_) => [
-            PopupMenuItem(
-                value: 'block',
-                child: Text(context.tr('Ziyaretçiyi engelle', 'Block visitor')))
-          ],
-        ),
+        if (_doorPlan?.has('visitor_blocking') == true)
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              if (value == 'block') _blockVisitor();
+            },
+            itemBuilder: (_) => [
+              PopupMenuItem(
+                  value: 'block',
+                  child: Text(
+                      context.tr('Ziyaretçiyi engelle', 'Block visitor')))
+            ],
+          ),
       ],
       child: Column(
         children: [
@@ -322,8 +391,8 @@ class _RingSessionScreenState extends ConsumerState<RingSessionScreen> {
                           style: Theme.of(context).textTheme.bodyMedium)),
                   if (item.courierNoteId != null)
                     TextButton(
-                        onPressed: busy ? null : _shareCourierNote,
-                        child: Text(context.tr('Notu paylaş', 'Share note'))),
+                        onPressed: busy ? null : _shareCourierCode,
+                        child: Text(context.tr('Kodu paylaş', 'Share code'))),
                 ],
               ),
             ),
@@ -340,23 +409,58 @@ class _RingSessionScreenState extends ConsumerState<RingSessionScreen> {
                 const SizedBox(width: 10),
                 Expanded(
                     child: FilledButton.icon(
-                        onPressed: busy ? null : () => _action('accept'),
-                        icon: Icon(_modeIcon(item.requestedMode)),
+                        onPressed: busy ? null : _showAnswerOptions,
+                        icon: const Icon(Icons.reply_rounded),
                         label: Text(context.tr('Yanıtla', 'Answer')))),
               ],
+            ),
+          ],
+          if (item.status == 'media_requested') ...[
+            const SizedBox(height: 12),
+            ElevCard(
+              color: const Color(0xFFF1F5FF),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    context.tr('Ziyaretçi onayı bekleniyor',
+                        'Waiting for visitor approval'),
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    context.tr(
+                        'Ziyaretçi ${_modeLabel(context, item.activeMode).toLowerCase()} isteğini kabul ettiğinde görüşme başlar.',
+                        'The call starts when the visitor accepts the ${_modeLabel(context, item.activeMode).toLowerCase()} request.'),
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodyMedium
+                        ?.copyWith(color: AppColors.muted),
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: busy ? null : () => _action('end'),
+                    icon: const Icon(Icons.close_rounded),
+                    label: Text(context.tr('İsteği iptal et', 'Cancel request')),
+                  ),
+                ],
+              ),
             ),
           ],
           if (item.status == 'accepted' && item.usesMedia) ...[
             const SizedBox(height: 12),
             _MediaPanel(
                 controller: media,
-                video: item.requestedMode == 'video',
+                video: item.activeMode == 'video',
                 compact: compact,
                 onEnd: () => _action('end')),
           ],
           SizedBox(height: compact ? 6 : 14),
-          Expanded(
-              child: _ChatPanel(ringId: item.id, input: input, onSend: _send)),
+          if (item.isActive)
+            Expanded(
+                child: _ChatPanel(ringId: item.id, input: input, onSend: _send))
+          else
+            const ClosedSessionNotice(),
         ],
       ),
     );
@@ -367,6 +471,12 @@ IconData _modeIcon(String mode) => switch (mode) {
       'video' => Icons.videocam_rounded,
       'audio' => Icons.call_rounded,
       _ => Icons.chat_bubble_rounded,
+    };
+
+String _modeLabel(BuildContext context, String mode) => switch (mode) {
+      'video' => context.tr('Görüntülü görüşme', 'Video call'),
+      'audio' => context.tr('Sesli görüşme', 'Voice call'),
+      _ => context.tr('Yazılı görüşme', 'Text chat'),
     };
 
 class _SessionHero extends StatelessWidget {
@@ -387,7 +497,7 @@ class _SessionHero extends StatelessWidget {
               decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.13),
                   borderRadius: BorderRadius.circular(19)),
-              child: Icon(_modeIcon(ring.requestedMode),
+              child: Icon(_modeIcon(ring.activeMode),
                   color: Colors.white, size: 28),
             ),
             const SizedBox(width: 14),
@@ -395,7 +505,7 @@ class _SessionHero extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(_modeLabel(context, ring.requestedMode),
+                  Text(_modeLabel(context, ring.activeMode),
                       style: Theme.of(context)
                           .textTheme
                           .titleLarge
@@ -431,6 +541,8 @@ class _SessionHero extends StatelessWidget {
       };
   String _statusLabel(BuildContext context, String status) => switch (status) {
         'pending' => context.tr('Zil çalıyor…', 'Ringing…'),
+        'media_requested' =>
+          context.tr('Ziyaretçi onayı bekleniyor', 'Waiting for visitor approval'),
         'accepted' => context.tr('Görüşme aktif', 'Call active'),
         'declined' => context.tr('Reddedildi', 'Declined'),
         'missed' => context.tr('Cevapsız ziyaret', 'Missed visit'),

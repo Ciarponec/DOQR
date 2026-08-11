@@ -35,6 +35,9 @@ class MediaSessionController extends ChangeNotifier {
   RTCPeerConnection? _peer;
   MediaStream? _localStream;
   StreamSubscription<List<Map<String, dynamic>>>? _signalSubscription;
+  StreamSubscription<List<Map<String, dynamic>>>? _iceSubscription;
+  final List<RTCIceCandidate> _queuedRemoteCandidates = [];
+  final Set<int> _receivedCandidateIds = {};
   bool _remoteDescriptionSet = false;
   bool _started = false;
   bool _muted = false;
@@ -92,6 +95,12 @@ class MediaSessionController extends ChangeNotifier {
         }
         _notify();
       };
+      _peer!.onIceCandidate = (candidate) {
+        if (_closed || candidate.candidate == null || candidate.candidate!.isEmpty) {
+          return;
+        }
+        unawaited(_sendLocalCandidate(candidate));
+      };
 
       _signalSubscription = client
           .from('webrtc_signals')
@@ -101,6 +110,16 @@ class MediaSessionController extends ChangeNotifier {
             _error = appText(
                 'Görüşme sinyali alınamadı. Lütfen tekrar deneyin.',
                 'The call signal could not be received. Please try again.');
+            _notify();
+          });
+      _iceSubscription = client
+          .from('webrtc_ice_candidates')
+          .stream(primaryKey: ['id'])
+          .eq('ring_id', ringId)
+          .listen(_onIceRows, onError: (Object error) {
+            _error = appText(
+                'Görüşme bağlantısı için ağ adayları alınamadı.',
+                'Network candidates for the call could not be received.');
             _notify();
           });
 
@@ -125,7 +144,6 @@ class MediaSessionController extends ChangeNotifier {
       final offer = await _peer!.createOffer(
           {'offerToReceiveAudio': true, 'offerToReceiveVideo': video});
       await _peer!.setLocalDescription(offer);
-      await _waitForIceGathering(_peer!);
       final completeOffer = await _peer!.getLocalDescription();
       if (completeOffer?.sdp == null || completeOffer!.sdp!.isEmpty) {
         throw StateError(appText('WebRTC teklifi oluşturulamadı.',
@@ -191,18 +209,52 @@ class MediaSessionController extends ChangeNotifier {
           body['answer_type'] as String? ?? 'answer'),
     );
     _remoteDescriptionSet = true;
+    await _flushQueuedRemoteCandidates();
     _notify();
   }
 
-  Future<void> _waitForIceGathering(RTCPeerConnection peer) async {
-    final deadline = DateTime.now().add(const Duration(seconds: 10));
-    while (!_closed && DateTime.now().isBefore(deadline)) {
-      final state = await peer.getIceGatheringState();
-      if (state == RTCIceGatheringState.RTCIceGatheringStateComplete) {
-        return;
-      }
-      await Future<void>.delayed(const Duration(milliseconds: 100));
+  Future<void> _sendLocalCandidate(RTCIceCandidate candidate) async {
+    try {
+      await client.from('webrtc_ice_candidates').insert({
+        'ring_id': ringId,
+        'sender_role': 'host',
+        'candidate': candidate.candidate,
+        'sdp_mid': candidate.sdpMid,
+        'sdp_mline_index': candidate.sdpMLineIndex,
+      });
+    } catch (_) {
+      // The final SDP may still contain a usable candidate. Do not tear down
+      // a call solely because one optional trickle candidate was lost.
     }
+  }
+
+  void _onIceRows(List<Map<String, dynamic>> rows) {
+    for (final row in rows) {
+      if (row['sender_role'] != 'visitor') continue;
+      final id = (row['id'] as num?)?.toInt();
+      if (id == null || !_receivedCandidateIds.add(id)) continue;
+      final value = row['candidate'];
+      if (value is! String || value.isEmpty) continue;
+      final candidate = RTCIceCandidate(
+        value,
+        row['sdp_mid'] as String?,
+        (row['sdp_mline_index'] as num?)?.toInt(),
+      );
+      if (!_remoteDescriptionSet) {
+        _queuedRemoteCandidates.add(candidate);
+      } else {
+        unawaited(_peer?.addCandidate(candidate) ?? Future<void>.value());
+      }
+    }
+  }
+
+  Future<void> _flushQueuedRemoteCandidates() async {
+    final peer = _peer;
+    if (peer == null) return;
+    for (final candidate in _queuedRemoteCandidates) {
+      await peer.addCandidate(candidate);
+    }
+    _queuedRemoteCandidates.clear();
   }
 
   void toggleMute() {
@@ -234,6 +286,8 @@ class MediaSessionController extends ChangeNotifier {
     await _localStream?.dispose();
     await _peer?.close();
     await _signalSubscription?.cancel();
+    await _iceSubscription?.cancel();
+    _queuedRemoteCandidates.clear();
     if (!_disposed) {
       localRenderer.srcObject = null;
       remoteRenderer.srcObject = null;

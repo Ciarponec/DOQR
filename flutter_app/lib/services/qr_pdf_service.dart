@@ -3,12 +3,16 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:qr_flutter/qr_flutter.dart';
 
+enum QrPdfTemplate { minimal, framed, poster }
+
 class QrPdfService {
   static Future<Uint8List> build({
     required String doorLabel,
     required String qrUrl,
     String? topText,
     String? bottomText,
+    String? sideText,
+    QrPdfTemplate template = QrPdfTemplate.minimal,
   }) async {
     final qrData = await QrPainter(
       data: qrUrl,
@@ -27,6 +31,25 @@ class QrPdfService {
     final qrImage = pw.MemoryImage(qrData.buffer.asUint8List());
     final normalizedTop = _clean(topText);
     final normalizedBottom = _clean(bottomText);
+    final normalizedSide = _clean(sideText);
+    final frameColor = switch (template) {
+      QrPdfTemplate.minimal => PdfColors.grey300,
+      QrPdfTemplate.framed => PdfColors.blue800,
+      QrPdfTemplate.poster => PdfColors.blue900,
+    };
+    final frameWidth = template == QrPdfTemplate.framed ? 4.0 : 1.0;
+    final qrBox = pw.Container(
+      width: 330,
+      height: 330,
+      padding: const pw.EdgeInsets.all(12),
+      decoration: pw.BoxDecoration(
+        color: PdfColors.white,
+        border: pw.Border.all(color: frameColor, width: frameWidth),
+        borderRadius: pw.BorderRadius.circular(
+            template == QrPdfTemplate.minimal ? 8 : 18),
+      ),
+      child: pw.Image(qrImage, fit: pw.BoxFit.contain),
+    );
 
     document.addPage(
       pw.Page(
@@ -35,17 +58,30 @@ class QrPdfService {
         build: (context) => pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.stretch,
           children: [
-            pw.Text(
-              'DOQR',
-              textAlign: pw.TextAlign.center,
-              style: pw.TextStyle(
-                font: font,
-                fontSize: 24,
-                fontWeight: pw.FontWeight.bold,
+            if (template == QrPdfTemplate.poster)
+              pw.Container(
+                padding: const pw.EdgeInsets.symmetric(vertical: 10),
                 color: PdfColors.blue900,
+                child: pw.Text('DOQR',
+                    textAlign: pw.TextAlign.center,
+                    style: pw.TextStyle(
+                        font: font,
+                        fontSize: 24,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.white)),
+              )
+            else
+              pw.Text(
+                'DOQR',
+                textAlign: pw.TextAlign.center,
+                style: pw.TextStyle(
+                  font: font,
+                  fontSize: 24,
+                  fontWeight: pw.FontWeight.bold,
+                  color: PdfColors.blue900,
+                ),
               ),
-            ),
-            pw.SizedBox(height: 6),
+            pw.SizedBox(height: 10),
             pw.Text(
               doorLabel,
               textAlign: pw.TextAlign.center,
@@ -70,19 +106,24 @@ class QrPdfService {
               ),
               pw.SizedBox(height: 16),
             ],
-            pw.Center(
-              child: pw.Container(
-                width: 330,
-                height: 330,
-                padding: const pw.EdgeInsets.all(12),
-                decoration: pw.BoxDecoration(
-                  color: PdfColors.white,
-                  border: pw.Border.all(color: PdfColors.grey300, width: 1),
-                  borderRadius: pw.BorderRadius.circular(8),
-                ),
-                child: pw.Image(qrImage, fit: pw.BoxFit.contain),
+            if (normalizedSide == null)
+              pw.Center(child: qrBox)
+            else
+              pw.Row(
+                crossAxisAlignment: pw.CrossAxisAlignment.center,
+                children: [
+                  pw.Expanded(child: qrBox),
+                  pw.SizedBox(width: 22),
+                  pw.Expanded(
+                    child: pw.Text(normalizedSide,
+                        style: pw.TextStyle(
+                            font: font,
+                            fontSize: 18,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColors.blue900)),
+                  ),
+                ],
               ),
-            ),
             if (normalizedBottom != null) ...[
               pw.SizedBox(height: 18),
               pw.Text(

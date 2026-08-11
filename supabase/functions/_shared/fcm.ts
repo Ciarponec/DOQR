@@ -155,7 +155,9 @@ export async function notifyDoorbell(
     doorId: string;
     doorLabel: string;
     visitorAlias: string | null;
+    courierLabel?: string | null;
     requestedMode: string;
+    courierNoteAvailable: boolean;
     recipientIds: string[];
   },
 ) {
@@ -168,18 +170,16 @@ export async function notifyDoorbell(
 
   const tokens = rows ?? [];
   const title = `${input.doorLabel}: Zil çalıyor`;
-  const modeLabel = input.requestedMode === "video"
-    ? "görüntülü görüşme"
-    : input.requestedMode === "audio"
-    ? "sesli görüşme"
-    : "mesajlaşma";
-  const body = `${input.visitorAlias ?? "Bir ziyaretçi"} ${modeLabel} istiyor`;
+  const body = input.courierLabel
+    ? `${input.courierLabel} kuryesi zili çalıyor`
+    : `${input.visitorAlias ?? "Bir ziyaretçi"} zili çalıyor`;
   const results = await Promise.allSettled(tokens.map(async (row) => {
     const result = await sendOne(row.fcm_token, { title, body }, {
       type: "doorbell_ring",
       ring_id: input.ringId,
       door_id: input.doorId,
       requested_mode: input.requestedMode,
+      courier_note_available: input.courierNoteAvailable ? "true" : "false",
       click_action: "FLUTTER_NOTIFICATION_CLICK",
     });
     if (!result.ok && isUnregistered(result.payload)) {
