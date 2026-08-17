@@ -292,7 +292,21 @@ function updateRingState(value) {
     $('mediaRequestCard').classList.add('hidden');
     closeMedia(false);
   }
+  $('ringAgainBtn').classList.toggle('hidden', ring.status !== 'missed');
 }
+
+$('ringAgainBtn').addEventListener('click', async () => {
+  if (channel) await supabase.removeChannel(channel);
+  channel = null;
+  await closeMedia(false);
+  ring = null;
+  seenMessages.clear();
+  $('messages').innerHTML = '<p class="empty-chat">Henüz mesaj yok.</p>';
+  $('ringAgainBtn').classList.add('hidden');
+  $('cancelBtn').classList.remove('hidden');
+  $('onlineDot').classList.add('offline');
+  show('setupView');
+});
 
 async function loadPersistentOffer() {
   if (remoteDescriptionSet || !ring || !activeMediaMode()) return;
