@@ -1,7 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../l10n/app_language.dart';
+import '../app_config.dart';
 import '../ui/app_theme.dart';
 import '../widgets/app_shell.dart';
 
@@ -52,7 +54,11 @@ class _AuthScreenState extends State<AuthScreen> {
     try {
       if (create) {
         final result = await Supabase.instance.client.auth
-            .signUp(email: mail, password: secret);
+            .signUp(
+              email: mail,
+              password: secret,
+              emailRedirectTo: kIsWeb ? null : AppConfig.authRedirectUrl,
+            );
         if (result.session == null) {
           if (mounted) {
             setState(() => info = context.tr(

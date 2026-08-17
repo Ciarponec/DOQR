@@ -1,4 +1,5 @@
 class AppConfig {
+  static const authRedirectUrl = 'com.doqr.app://auth/callback';
   static const supabaseUrl = String.fromEnvironment(
     'SUPABASE_URL',
     defaultValue: 'https://warsaqcfovasaitcwtxy.supabase.co',
