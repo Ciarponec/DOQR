@@ -318,6 +318,7 @@ Deno.serve(async (req) => {
       courierNoteAvailable: matchedCourierNote != null,
       courierLabel: matchedCourierNote?.courier_label,
       recipientIds: [...new Set(recipients)],
+      ringTimeoutSeconds: settings.ring_timeout_seconds,
     }));
 
     return json(201, {

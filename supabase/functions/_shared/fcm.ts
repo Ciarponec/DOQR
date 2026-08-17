@@ -100,11 +100,23 @@ async function googleAccessToken(): Promise<string> {
 
 async function sendOne(
   token: string,
-  notification: { title: string; body: string },
+  notification: { title: string; body: string } | null,
   data: Record<string, string>,
 ) {
   const account = serviceAccount();
   const accessToken = await googleAccessToken();
+  const isAlert = notification != null;
+  const android: Record<string, unknown> = {
+    priority: "HIGH",
+    ttl: "60s",
+  };
+  if (notification) {
+    android.notification = {
+      channel_id: "doqr_rings",
+      sound: "default",
+      tag: `ring-${data.ring_id}`,
+    };
+  }
   const response = await fetch(
     `https://fcm.googleapis.com/v1/projects/${account.project_id}/messages:send`,
     {
@@ -116,23 +128,25 @@ async function sendOne(
       body: JSON.stringify({
         message: {
           token,
-          notification,
+          ...(notification ? { notification } : {}),
           data,
-          android: {
-            priority: "HIGH",
-            ttl: "60s",
-            notification: {
-              channel_id: "doqr_rings",
-              sound: "default",
-              tag: `ring-${data.ring_id}`,
-            },
-          },
+          android,
           apns: {
             headers: {
-              "apns-priority": "10",
+              "apns-priority": isAlert ? "10" : "5",
+              "apns-push-type": isAlert ? "alert" : "background",
               "apns-expiration": String(Math.floor(Date.now() / 1000) + 60),
+              "apns-collapse-id": `ring-${data.ring_id}`,
             },
-            payload: { aps: { sound: "default", "content-available": 1 } },
+            payload: {
+              aps: isAlert
+                ? {
+                  sound: "default",
+                  "content-available": 1,
+                  "interruption-level": "time-sensitive",
+                }
+                : { "content-available": 1 },
+            },
           },
         },
       }),
@@ -159,12 +173,13 @@ export async function notifyDoorbell(
     requestedMode: string;
     courierNoteAvailable: boolean;
     recipientIds: string[];
+    ringTimeoutSeconds: number;
   },
 ) {
   if (input.recipientIds.length === 0) return { sent: 0, failed: 0 };
   const { data: rows, error } = await admin
     .from("user_push_tokens")
-    .select("id, fcm_token")
+    .select("id, fcm_token, platform")
     .in("user_id", input.recipientIds);
   if (error) throw new Error(error.message);
 
@@ -174,13 +189,100 @@ export async function notifyDoorbell(
     ? `${input.courierLabel} kuryesi zili çalıyor`
     : `${input.visitorAlias ?? "Bir ziyaretçi"} zili çalıyor`;
   const results = await Promise.allSettled(tokens.map(async (row) => {
-    const result = await sendOne(row.fcm_token, { title, body }, {
+    const result = await sendOne(
+      row.fcm_token,
+      row.platform === "android" ? null : { title, body },
+      {
       type: "doorbell_ring",
       ring_id: input.ringId,
       door_id: input.doorId,
       requested_mode: input.requestedMode,
+      ring_timeout_seconds: String(input.ringTimeoutSeconds),
       courier_note_available: input.courierNoteAvailable ? "true" : "false",
+      notification_title: title,
+      notification_body: body,
       click_action: "FLUTTER_NOTIFICATION_CLICK",
+      },
+    );
+    if (!result.ok && isUnregistered(result.payload)) {
+      await admin.from("user_push_tokens").delete().eq("id", row.id);
+    }
+    if (!result.ok) throw new Error(`FCM ${result.status}`);
+  }));
+  const iosTokens = tokens.filter((row) => row.platform === "ios");
+  const repeatEveryMs = 8000;
+  const timeoutMs = Math.min(
+    Math.max(input.ringTimeoutSeconds * 1000, repeatEveryMs),
+    60_000,
+  );
+  let elapsed = 0;
+  while (elapsed < timeoutMs) {
+    const waitMs = Math.min(repeatEveryMs, timeoutMs - elapsed);
+    await new Promise((resolve) => setTimeout(resolve, waitMs));
+    elapsed += waitMs;
+    const { data: currentRing, error: ringError } = await admin.from("rings")
+      .select("status").eq("id", input.ringId).maybeSingle();
+    if (ringError) throw new Error(ringError.message);
+    if (currentRing?.status !== "pending") return {
+      sent: results.filter((result) => result.status === "fulfilled").length,
+      failed: results.filter((result) => result.status === "rejected").length,
+    };
+    if (elapsed < timeoutMs && iosTokens.length > 0) {
+      await Promise.allSettled(iosTokens.map((row) =>
+        sendOne(row.fcm_token, { title, body }, {
+          type: "doorbell_ring",
+          ring_id: input.ringId,
+          door_id: input.doorId,
+          requested_mode: input.requestedMode,
+          ring_timeout_seconds: String(input.ringTimeoutSeconds),
+          courier_note_available: input.courierNoteAvailable ? "true" : "false",
+          notification_title: title,
+          notification_body: body,
+          click_action: "FLUTTER_NOTIFICATION_CLICK",
+        })
+      ));
+    }
+  }
+
+  const closedAt = new Date().toISOString();
+  const { data: missedRing, error: missedError } = await admin.from("rings")
+    .update({ status: "missed", closed_at: closedAt })
+    .eq("id", input.ringId).eq("status", "pending")
+    .select("id").maybeSingle();
+  if (missedError) throw new Error(missedError.message);
+  if (missedRing) {
+    const { error: eventError } = await admin.from("ring_events").insert({
+      ring_id: input.ringId,
+      event_type: "missed",
+      actor_type: "system",
+      metadata: { timeout_seconds: input.ringTimeoutSeconds },
+    });
+    if (eventError) throw new Error(eventError.message);
+    await notifyDoorbellStatus(admin, {
+      ringId: input.ringId,
+      recipientIds: input.recipientIds,
+      status: "missed",
+    });
+  }
+  return {
+    sent: results.filter((result) => result.status === "fulfilled").length,
+    failed: results.filter((result) => result.status === "rejected").length,
+  };
+}
+
+export async function notifyDoorbellStatus(
+  admin: SupabaseClient,
+  input: { ringId: string; recipientIds: string[]; status: string },
+) {
+  if (input.recipientIds.length === 0) return { sent: 0, failed: 0 };
+  const { data: rows, error } = await admin.from("user_push_tokens")
+    .select("id, fcm_token").in("user_id", input.recipientIds);
+  if (error) throw new Error(error.message);
+  const results = await Promise.allSettled((rows ?? []).map(async (row) => {
+    const result = await sendOne(row.fcm_token, null, {
+      type: "doorbell_status",
+      ring_id: input.ringId,
+      status: input.status,
     });
     if (!result.ok && isUnregistered(result.payload)) {
       await admin.from("user_push_tokens").delete().eq("id", row.id);

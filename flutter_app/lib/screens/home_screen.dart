@@ -21,6 +21,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   late Future<_HomeData> _future;
   Locale? _registeredLocale;
   PlanItem? _accountPlan;
+  _HomeData? _lastData;
 
   @override
   void initState() {
@@ -44,9 +45,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Future<_HomeData> _load() async {
     final api = ref.read(doqrApiProvider);
     final results = await Future.wait([api.listDoors(), api.listRings()]);
-    final data = _HomeData(
-        results[0] as DoorListResult, results[1] as List<RingItem>);
-    _accountPlan = data.doors.accountPlan;
+    final data =
+        _HomeData(results[0] as DoorListResult, results[1] as List<RingItem>);
+    if (mounted) {
+      setState(() {
+        _accountPlan = data.doors.accountPlan;
+        _lastData = data;
+      });
+    } else {
+      _accountPlan = data.doors.accountPlan;
+      _lastData = data;
+    }
     return data;
   }
 
@@ -59,7 +68,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ? 3
           : ((endsAt.difference(DateTime.now()).inHours + 23) ~/ 24)
               .clamp(0, 999);
-      return context.isEnglish ? 'DOQR (Pro • $days days)' : 'DOQR (Pro • $days gün)';
+      return context.isEnglish
+          ? 'DOQR (Pro • $days days)'
+          : 'DOQR (Pro • $days gün)';
     }
     return plan.isPro ? 'DOQR (Pro)' : 'DOQR (Free)';
   }
@@ -70,6 +81,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       _future = next;
     });
     await next;
+  }
+
+  Future<void> _signOut() async {
+    await NotificationService.instance.stopForLogout();
+    await Supabase.instance.client.auth.signOut();
+    if (!mounted) return;
+    Navigator.of(context).pushNamedAndRemoveUntil('/', (_) => false);
   }
 
   Future<void> _deleteAccount() async {
@@ -148,115 +166,117 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         actions: [
           IconButton(
             tooltip: context.tr('Ayarlar', 'Settings'),
-            onPressed: _accountPlan == null
-                ? null
-                : () async {
-                    final changed = await Navigator.push<bool>(
-                      context,
-                      MaterialPageRoute<bool>(
-                        builder: (_) => SettingsScreen(
-                          plan: _accountPlan!,
-                          onDeleteAccount: _deleteAccount,
-                        ),
-                      ),
-                    );
-                    if (changed == true && mounted) await _refresh();
-                  },
-            icon: const Icon(Icons.settings_outlined),
-          ),
-          IconButton(
-            tooltip: context.tr('Çıkış yap', 'Sign out'),
             onPressed: () async {
-              await NotificationService.instance.stopForLogout();
-              await Supabase.instance.client.auth.signOut();
+              final plan = _accountPlan ?? (await _future).doors.accountPlan;
               if (!context.mounted) return;
-              Navigator.of(context).pushNamedAndRemoveUntil('/', (_) => false);
+              final changed = await Navigator.push<bool>(
+                context,
+                MaterialPageRoute<bool>(
+                  builder: (_) => SettingsScreen(
+                    plan: plan,
+                    onDeleteAccount: _deleteAccount,
+                    onSignOut: _signOut,
+                  ),
+                ),
+              );
+              if (changed == true && mounted) await _refresh();
             },
-            icon: const Icon(Icons.logout_rounded),
+            icon: const Icon(Icons.settings_outlined),
           ),
         ],
         child: FutureBuilder<_HomeData>(
           future: _future,
           builder: (context, snapshot) {
-            if (snapshot.connectionState != ConnectionState.done) {
+            final data = snapshot.data ?? _lastData;
+            if (data == null &&
+                snapshot.connectionState != ConnectionState.done) {
               return const Center(child: CircularProgressIndicator());
             }
-            if (snapshot.hasError) {
+            if (data == null && snapshot.hasError) {
               return _ErrorState(
                   message: snapshot.error.toString(), retry: _refresh);
             }
-            final data = snapshot.requireData;
-            return RefreshIndicator(
-              onRefresh: _refresh,
-              child: ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                children: [
-                  FilledButton.icon(
-                    onPressed: () async {
-                      await Navigator.pushNamed(context, '/doors');
-                      if (mounted) _refresh();
-                    },
-                    icon: const Icon(Icons.door_front_door_rounded),
-                    label: Text(context.tr('Dijital zillerim ve QR kodları',
-                        'My digital doorbells and QR codes')),
-                  ),
-                  const SizedBox(height: 22),
-                  Row(
+            final homeData = data!;
+            return Stack(
+              children: [
+                RefreshIndicator(
+                  onRefresh: _refresh,
+                  child: ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
                     children: [
-                      Expanded(
-                          child: SectionLabel(context.tr(
-                              'Son ziyaretçiler', 'Recent visitors'))),
-                      Text(
-                        data.doors.accountPlan.isPro
-                            ? context.tr('Son 90 gün', 'Last 90 days')
-                            : context.tr('Son 3 kayıt', 'Last 3 records'),
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodySmall
-                            ?.copyWith(color: const Color(0xFF64748B)),
+                      FilledButton.icon(
+                        onPressed: () async {
+                          await Navigator.pushNamed(context, '/doors');
+                          if (mounted) _refresh();
+                        },
+                        icon: const Icon(Icons.door_front_door_rounded),
+                        label: Text(context.tr('Dijital zillerim ve QR kodları',
+                            'My digital doorbells and QR codes')),
                       ),
+                      const SizedBox(height: 22),
+                      Row(
+                        children: [
+                          Expanded(
+                              child: SectionLabel(context.tr(
+                                  'Son ziyaretçiler', 'Recent visitors'))),
+                          Text(
+                            homeData.doors.accountPlan.isPro
+                                ? context.tr('Son 90 gün', 'Last 90 days')
+                                : context.tr('Son 3 kayıt', 'Last 3 records'),
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(color: const Color(0xFF64748B)),
+                          ),
+                        ],
+                      ),
+                      if (homeData.rings.isEmpty)
+                        ElevCard(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 24),
+                            child: Column(
+                              children: [
+                                const Icon(Icons.notifications_none_rounded,
+                                    size: 42, color: Color(0xFF94A3B8)),
+                                const SizedBox(height: 10),
+                                Text(context.tr(
+                                    'Henüz ziyaretçi yok', 'No visitors yet')),
+                                const SizedBox(height: 4),
+                                Text(
+                                    context.tr(
+                                        'QR kodunuz tarandığında burada görünecek.',
+                                        'Visitors will appear here when your QR code is scanned.'),
+                                    style: const TextStyle(
+                                        color: Color(0xFF64748B))),
+                              ],
+                            ),
+                          ),
+                        )
+                      else
+                        ...homeData.rings.map((ring) => Padding(
+                              padding: const EdgeInsets.only(bottom: 10),
+                              child: _RingCard(
+                                ring: ring,
+                                doorLabel: homeData.doors.doors
+                                    .where((door) => door.id == ring.doorId)
+                                    .firstOrNull
+                                    ?.label,
+                                onTap: () async {
+                                  await Navigator.pushNamed(context, '/ring',
+                                      arguments: ring.id);
+                                  if (mounted) _refresh();
+                                },
+                              ),
+                            )),
                     ],
                   ),
-                  if (data.rings.isEmpty)
-                    ElevCard(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 24),
-                        child: Column(
-                          children: [
-                            const Icon(Icons.notifications_none_rounded,
-                                size: 42, color: Color(0xFF94A3B8)),
-                            const SizedBox(height: 10),
-                            Text(context.tr(
-                                'Henüz ziyaretçi yok', 'No visitors yet')),
-                            const SizedBox(height: 4),
-                            Text(
-                                context.tr(
-                                    'QR kodunuz tarandığında burada görünecek.',
-                                    'Visitors will appear here when your QR code is scanned.'),
-                                style:
-                                    const TextStyle(color: Color(0xFF64748B))),
-                          ],
-                        ),
-                      ),
-                    )
-                  else
-                    ...data.rings.map((ring) => Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: _RingCard(
-                            ring: ring,
-                            doorLabel: data.doors.doors
-                                .where((door) => door.id == ring.doorId)
-                                .firstOrNull
-                                ?.label,
-                            onTap: () async {
-                              await Navigator.pushNamed(context, '/ring',
-                                  arguments: ring.id);
-                              if (mounted) _refresh();
-                            },
-                          ),
-                        )),
-                ],
-              ),
+                ),
+                if (snapshot.connectionState != ConnectionState.done)
+                  const Align(
+                    alignment: Alignment.topCenter,
+                    child: LinearProgressIndicator(minHeight: 2),
+                  ),
+              ],
             );
           },
         ),
@@ -378,8 +398,7 @@ class _RingCard extends StatelessWidget {
 
   String _status(BuildContext context, String status) => switch (status) {
         'pending' => context.tr('Bekliyor', 'Pending'),
-        'media_requested' =>
-          context.tr('Onay bekleniyor', 'Awaiting approval'),
+        'media_requested' => context.tr('Onay bekleniyor', 'Awaiting approval'),
         'accepted' => context.tr('Yanıtlandı', 'Accepted'),
         'declined' => context.tr('Reddedildi', 'Declined'),
         'missed' => context.tr('Cevapsız', 'Missed'),

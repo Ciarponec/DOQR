@@ -148,8 +148,9 @@ class _RingSessionScreenState extends ConsumerState<RingSessionScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(context.tr('Nasıl yanıtlamak istersiniz?',
-                  'How would you like to answer?'),
+              Text(
+                  context.tr('Nasıl yanıtlamak istersiniz?',
+                      'How would you like to answer?'),
                   style: Theme.of(context).textTheme.headlineSmall),
               const SizedBox(height: 8),
               Text(
@@ -165,20 +166,22 @@ class _RingSessionScreenState extends ConsumerState<RingSessionScreen> {
               FilledButton.icon(
                 onPressed: () => Navigator.pop(context, 'text'),
                 icon: const Icon(Icons.chat_bubble_rounded),
-                label: Text(context.tr('Mesajlaşmayla yanıtla', 'Answer by chat')),
+                label:
+                    Text(context.tr('Mesajlaşmayla yanıtla', 'Answer by chat')),
               ),
               const SizedBox(height: 10),
               OutlinedButton.icon(
                 onPressed: () => Navigator.pop(context, 'audio'),
                 icon: const Icon(Icons.call_rounded),
-                label: Text(context.tr('Sesli görüşme iste', 'Request voice call')),
+                label: Text(
+                    context.tr('Sesli görüşme iste', 'Request voice call')),
               ),
               const SizedBox(height: 10),
               OutlinedButton.icon(
                 onPressed: () => Navigator.pop(context, 'video'),
                 icon: const Icon(Icons.videocam_rounded),
-                label: Text(context.tr('Görüntülü görüşme iste',
-                    'Request video call')),
+                label: Text(
+                    context.tr('Görüntülü görüşme iste', 'Request video call')),
               ),
             ],
           ),
@@ -367,8 +370,8 @@ class _RingSessionScreenState extends ConsumerState<RingSessionScreen> {
             itemBuilder: (_) => [
               PopupMenuItem(
                   value: 'block',
-                  child: Text(
-                      context.tr('Ziyaretçiyi engelle', 'Block visitor')))
+                  child:
+                      Text(context.tr('Ziyaretçiyi engelle', 'Block visitor')))
             ],
           ),
       ],
@@ -441,7 +444,8 @@ class _RingSessionScreenState extends ConsumerState<RingSessionScreen> {
                   OutlinedButton.icon(
                     onPressed: busy ? null : () => _action('end'),
                     icon: const Icon(Icons.close_rounded),
-                    label: Text(context.tr('İsteği iptal et', 'Cancel request')),
+                    label:
+                        Text(context.tr('İsteği iptal et', 'Cancel request')),
                   ),
                 ],
               ),
@@ -541,8 +545,8 @@ class _SessionHero extends StatelessWidget {
       };
   String _statusLabel(BuildContext context, String status) => switch (status) {
         'pending' => context.tr('Zil çalıyor…', 'Ringing…'),
-        'media_requested' =>
-          context.tr('Ziyaretçi onayı bekleniyor', 'Waiting for visitor approval'),
+        'media_requested' => context.tr(
+            'Ziyaretçi onayı bekleniyor', 'Waiting for visitor approval'),
         'accepted' => context.tr('Görüşme aktif', 'Call active'),
         'declined' => context.tr('Reddedildi', 'Declined'),
         'missed' => context.tr('Cevapsız ziyaret', 'Missed visit'),
@@ -714,7 +718,7 @@ class _RoundControl extends StatelessWidget {
       icon: Icon(icon));
 }
 
-class _ChatPanel extends ConsumerWidget {
+class _ChatPanel extends ConsumerStatefulWidget {
   final String ringId;
   final TextEditingController input;
   final Future<void> Function() onSend;
@@ -722,11 +726,38 @@ class _ChatPanel extends ConsumerWidget {
       {required this.ringId, required this.input, required this.onSend});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => Column(
+  ConsumerState<_ChatPanel> createState() => _ChatPanelState();
+}
+
+class _ChatPanelState extends ConsumerState<_ChatPanel> {
+  final _scrollController = ScrollController();
+  int _messageCount = 0;
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _scrollToLatest(int messageCount) {
+    if (messageCount == 0 || messageCount == _messageCount) return;
+    _messageCount = messageCount;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) return;
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => Column(
         children: [
           Expanded(
             child: StreamBuilder<List<ChatMessageItem>>(
-              stream: ref.read(doqrApiProvider).watchChat(ringId),
+              stream: ref.read(doqrApiProvider).watchChat(widget.ringId),
               builder: (context, snapshot) {
                 final messages = snapshot.data ?? const <ChatMessageItem>[];
                 if (messages.isEmpty) {
@@ -739,14 +770,14 @@ class _ChatPanel extends ConsumerWidget {
                               .bodyMedium
                               ?.copyWith(color: AppColors.muted)));
                 }
+                _scrollToLatest(messages.length);
                 return ListView.separated(
-                  reverse: true,
+                  controller: _scrollController,
                   itemCount: messages.length,
                   separatorBuilder: (context, index) =>
                       const SizedBox(height: 8),
-                  itemBuilder: (context, reverseIndex) {
-                    final message =
-                        messages[messages.length - reverseIndex - 1];
+                  itemBuilder: (context, index) {
+                    final message = messages[index];
                     final host = message.senderType == 'host';
                     final system = message.senderType == 'system';
                     return Align(
@@ -789,9 +820,9 @@ class _ChatPanel extends ConsumerWidget {
             children: [
               Expanded(
                 child: TextField(
-                  controller: input,
+                  controller: widget.input,
                   textInputAction: TextInputAction.send,
-                  onSubmitted: (_) => onSend(),
+                  onSubmitted: (_) => widget.onSend(),
                   decoration: InputDecoration(
                       hintText: context.tr('Mesaj yazın…', 'Write a message…'),
                       prefixIcon:
@@ -800,7 +831,7 @@ class _ChatPanel extends ConsumerWidget {
               ),
               const SizedBox(width: 8),
               IconButton.filled(
-                  onPressed: onSend,
+                  onPressed: widget.onSend,
                   style: IconButton.styleFrom(
                       backgroundColor: AppColors.blue,
                       foregroundColor: Colors.white,

@@ -12,6 +12,7 @@ import {
   serviceClient,
 } from "../_shared/utils.ts";
 import { decryptCourierCode } from "../_shared/secrets.ts";
+import { notifyDoorbellStatus, runInBackground } from "../_shared/fcm.ts";
 
 type Action =
   | "accept"
@@ -267,6 +268,21 @@ Deno.serve(async (req) => {
         sender_type: "system",
         message_text: "Ziyaretçi sesli/görüntülü görüşme isteğini reddetti. Mesajlaşma açık.",
       });
+    }
+
+    if (ring.status === "pending" && updated.status !== "pending") {
+      const { data: sharedRows, error: sharedError } = await admin
+        .from("door_shared_users").select("user_id").eq("door_id", ring.door_id);
+      if (sharedError) throw new Error(sharedError.message);
+      const recipients = [
+        ownerUserId,
+        ...(sharedRows ?? []).map((row) => row.user_id),
+      ];
+      runInBackground(notifyDoorbellStatus(admin, {
+        ringId,
+        recipientIds: [...new Set(recipients)],
+        status: updated.status,
+      }));
     }
 
     if (action === "end" && ring.answered_at && ["audio", "video"].includes(ring.accepted_mode ?? "")) {

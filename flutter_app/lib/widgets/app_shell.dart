@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../l10n/app_language.dart';
 import '../ui/app_theme.dart';
 
 class AppShell extends StatelessWidget {
@@ -25,10 +24,7 @@ class AppShell extends StatelessWidget {
         appBar: showAppBar
             ? AppBar(
                 title: Text(title),
-                actions: [
-                  const LanguagePickerButton(),
-                  ...?actions,
-                ],
+                actions: actions,
                 toolbarHeight: 72,
                 actionsPadding: const EdgeInsets.only(right: 12),
               )
