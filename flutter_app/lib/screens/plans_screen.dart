@@ -71,6 +71,8 @@ class _PlansScreenState extends State<PlansScreen> {
           SectionLabel(context.tr('Planları karşılaştır', 'Compare plans')),
           _PlanColumns(proPrice: _store.displayPrice),
           const SizedBox(height: 18),
+          _SubscriptionOfferCard(price: _store.displayPrice),
+          const SizedBox(height: 12),
           FilledButton.icon(
             onPressed: widget.currentPlan.isPro && !widget.currentPlan.isTrial
                 ? null
@@ -147,6 +149,41 @@ class _PlansScreenState extends State<PlansScreen> {
       ),
     );
   }
+}
+
+class _SubscriptionOfferCard extends StatelessWidget {
+  final String price;
+
+  const _SubscriptionOfferCard({required this.price});
+
+  @override
+  Widget build(BuildContext context) => ElevCard(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              context.tr('DOQR Pro Yıllık', 'DOQR Pro Annual'),
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              context.tr('Süre: 1 yıl • Fiyat: $price / yıl',
+                  'Length: 1 year • Price: $price / year'),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              context.tr(
+                  'Otomatik yenilenir; yenileme abonelik ayarlarından iptal edilebilir.',
+                  'Auto-renews; renewal can be canceled in subscription settings.'),
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: AppColors.muted),
+            ),
+          ],
+        ),
+      );
 }
 
 class _PlanColumns extends StatelessWidget {

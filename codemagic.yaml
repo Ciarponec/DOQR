@@ -42,7 +42,7 @@ workflows:
           cd flutter_app
           flutter build ipa --release \
             --build-name=1.0.0 \
-            --build-number=6 \
+            --build-number=7 \
             --export-options-plist=/Users/builder/export_options.plist
     publishing:
       app_store_connect:

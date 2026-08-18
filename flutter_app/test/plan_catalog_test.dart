@@ -78,6 +78,13 @@ void main() {
     // The purchase UI must not hardcode a storefront price. StoreKit replaces
     // this fallback with the user's localized App Store price on device.
     expect(find.textContaining('Mağazada gösterilir'), findsWidgets);
+    await tester.scrollUntilVisible(
+      find.text('DOQR Pro Yıllık'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('DOQR Pro Yıllık'), findsOneWidget);
+    expect(find.textContaining('Süre: 1 yıl'), findsOneWidget);
     expect(
       tester.getCenter(find.text('Free')).dx,
       lessThan(tester.getCenter(find.text('Pro')).dx),
@@ -136,6 +143,15 @@ void main() {
       scrollable: find.byType(Scrollable).first,
     );
     expect(find.text('Restore purchases'), findsOneWidget);
+    expect(find.text('DOQR Pro Annual'), findsOneWidget);
+    expect(find.textContaining('Length: 1 year'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Terms of Use'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Privacy Policy'), findsOneWidget);
+    expect(find.text('Terms of Use'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

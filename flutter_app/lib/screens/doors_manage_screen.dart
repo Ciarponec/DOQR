@@ -12,6 +12,7 @@ import 'courier_notes_screen.dart';
 import 'door_blocks_screen.dart';
 import 'door_qr_screen.dart';
 import 'door_share_screen.dart';
+import 'plans_screen.dart';
 
 class DoorsManageScreen extends ConsumerStatefulWidget {
   const DoorsManageScreen({super.key});
@@ -34,6 +35,67 @@ class _DoorsManageScreenState extends ConsumerState<DoorsManageScreen> {
     setState(() {
       _future = next;
     });
+  }
+
+  Future<void> _openPlans(PlanItem plan) async {
+    final changed = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute<bool>(builder: (_) => PlansScreen(currentPlan: plan)),
+    );
+    if (changed == true && mounted) _reload();
+  }
+
+  Future<void> _showProRequired({
+    required PlanItem plan,
+    required String title,
+    required String message,
+  }) async {
+    final showPlans = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        icon: const Icon(Icons.workspace_premium_rounded),
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(context.tr('Kapat', 'Close')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(context.tr('Planları gör', 'View plans')),
+          ),
+        ],
+      ),
+    );
+    if (showPlans == true && mounted) await _openPlans(plan);
+  }
+
+  Future<void> _showDoorLimit(PlanItem plan) => _showProRequired(
+        plan: plan,
+        title: context.tr('Free plan zil sınırına ulaştın',
+            'You reached the Free plan doorbell limit'),
+        message: context.tr(
+            'Free plan en fazla 1 dijital zil içerir. Yeni bir zil eklemek için Pro planına geçebilir ve en fazla 3 dijital zil oluşturabilirsin.',
+            'The Free plan includes 1 digital doorbell. Upgrade to Pro to add another doorbell and create up to 3 digital doorbells.'),
+      );
+
+  Future<void> _openCourierNotes(DoorItem door) async {
+    if (door.plan.has('courier_notes')) {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => CourierNotesScreen(door: door)),
+      );
+      return;
+    }
+    await _showProRequired(
+      plan: door.plan,
+      title: context.tr(
+          'Kurye notları Pro özelliğidir', 'Courier notes are a Pro feature'),
+      message: context.tr(
+          'Kurye şirketine özel teslimat notları ve teslimat kodları DOQR Pro ile kullanılabilir.',
+          'Courier-specific delivery notes and delivery codes are available with DOQR Pro.'),
+    );
   }
 
   Future<void> _create(PlanItem plan) async {
@@ -221,8 +283,9 @@ class _DoorsManageScreenState extends ConsumerState<DoorsManageScreen> {
   Future<void> _showQr(DoorItem door) async {
     try {
       var token = await DoorQrCache.read(door.id);
-      token ??= (await ref.read(doqrApiProvider).createQrToken(doorId: door.id))
-          ['qr_token'] as String;
+      token ??= (await ref
+          .read(doqrApiProvider)
+          .createQrToken(doorId: door.id))['qr_token'] as String;
       await DoorQrCache.save(door.id, token);
       if (!mounted) return;
       final url = AppConfig.visitorUrlForToken(
@@ -231,9 +294,7 @@ class _DoorsManageScreenState extends ConsumerState<DoorsManageScreen> {
       await Navigator.push(
         context,
         MaterialPageRoute(
-            builder: (_) => DoorQrScreen(
-                doorLabel: door.label,
-                qrUrl: url)),
+            builder: (_) => DoorQrScreen(doorLabel: door.label, qrUrl: url)),
       );
     } catch (error) {
       if (mounted) {
@@ -339,17 +400,17 @@ class _DoorsManageScreenState extends ConsumerState<DoorsManageScreen> {
                                 '${result.doors.length}/${result.accountPlan.maxDoors} doorbells'),
                             style: Theme.of(context).textTheme.titleMedium)),
                     FilledButton.icon(
-                      onPressed:
+                      onPressed: () =>
                           result.doors.length < result.accountPlan.maxDoors
-                              ? () => _create(result.accountPlan)
-                              : null,
+                              ? _create(result.accountPlan)
+                              : _showDoorLimit(result.accountPlan),
                       icon: const Icon(Icons.add_rounded),
-                        label: Text(context.tr('Ekle', 'Add')),
+                      label: Text(context.tr('Ekle', 'Add')),
                     ),
                     const SizedBox(width: 8),
                     IconButton.outlined(
-                      tooltip: context.tr(
-                          'Davet kodunu kullan', 'Use invite code'),
+                      tooltip:
+                          context.tr('Davet kodunu kullan', 'Use invite code'),
                       onPressed: _acceptShareInvite,
                       icon: const Icon(Icons.group_add_rounded),
                     ),
@@ -405,20 +466,12 @@ class _DoorsManageScreenState extends ConsumerState<DoorsManageScreen> {
                                                 icon: const Icon(
                                                     Icons.qr_code_2_rounded),
                                                 label: Text(context.tr(
-                                                    'QR kodu',
-                                                    'QR code')))),
+                                                    'QR kodu', 'QR code')))),
                                         const SizedBox(width: 8),
                                         Expanded(
                                           child: OutlinedButton.icon(
-                                            onPressed: door.plan
-                                                    .has('courier_notes')
-                                                ? () => Navigator.push(
-                                                    context,
-                                                    MaterialPageRoute(
-                                                        builder: (_) =>
-                                                            CourierNotesScreen(
-                                                                door: door)))
-                                                : null,
+                                            onPressed: () =>
+                                                _openCourierNotes(door),
                                             icon: const Icon(
                                                 Icons.local_shipping_outlined),
                                             label: Text(
@@ -443,7 +496,8 @@ class _DoorsManageScreenState extends ConsumerState<DoorsManageScreen> {
                                               builder: (_) =>
                                                   DoorShareScreen(door: door)),
                                         ),
-                                        icon: const Icon(Icons.people_alt_rounded),
+                                        icon: const Icon(
+                                            Icons.people_alt_rounded),
                                         label: Text(context.tr(
                                             'Host ile paylaş',
                                             'Share with host')),
@@ -452,17 +506,17 @@ class _DoorsManageScreenState extends ConsumerState<DoorsManageScreen> {
                                     SizedBox(
                                       width: double.infinity,
                                       child: TextButton.icon(
-                                        onPressed: door.plan
-                                                .has('visitor_blocking')
-                                            ? () => Navigator.push(
-                                                  context,
-                                                  MaterialPageRoute(
-                                                    builder: (_) =>
-                                                        DoorBlocksScreen(
-                                                            door: door),
-                                                  ),
-                                                )
-                                            : null,
+                                        onPressed:
+                                            door.plan.has('visitor_blocking')
+                                                ? () => Navigator.push(
+                                                      context,
+                                                      MaterialPageRoute(
+                                                        builder: (_) =>
+                                                            DoorBlocksScreen(
+                                                                door: door),
+                                                      ),
+                                                    )
+                                                : null,
                                         icon: const Icon(Icons.shield_outlined),
                                         label: Text(context.tr(
                                             door.plan.has('visitor_blocking')
