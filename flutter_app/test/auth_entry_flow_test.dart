@@ -15,6 +15,7 @@ class _FakeAuthGateway implements AuthGateway {
   String? resentEmail;
   String? pendingEmail;
   AuthException? signInError;
+  AuthException? resendError;
 
   @override
   Stream<AuthException> get authErrors => authErrorController.stream;
@@ -27,6 +28,7 @@ class _FakeAuthGateway implements AuthGateway {
 
   @override
   Future<void> resendSignupConfirmation({required String email}) async {
+    if (resendError != null) throw resendError!;
     resendCount++;
     resentEmail = email;
   }
@@ -190,5 +192,34 @@ void main() {
     expect(find.textContaining('süresi geçmiş'), findsOneWidget);
     expect(find.textContaining('60 dakika geçerli'), findsOneWidget);
     expect(find.text('Doğrulama e-postasını yeniden gönder'), findsOneWidget);
+  });
+
+  testWidgets('e-posta servisi hatası ham JSON göstermeden açıklanır',
+      (tester) async {
+    final authGateway = _FakeAuthGateway()
+      ..pendingEmail = 'tester@example.com'
+      ..resendError = const AuthException(
+        'Error sending confirmation email',
+        code: 'unexpected_failure',
+      );
+    await pumpEntry(tester, authGateway: authGateway);
+
+    authGateway.authErrorController.add(const AuthException(
+      'Email link is invalid or has expired',
+      code: 'access_denied',
+    ));
+    await tester.pumpAndSettle();
+    final resendButton =
+        find.widgetWithText(TextButton, 'Doğrulama e-postasını yeniden gönder');
+    await tester.ensureVisible(resendButton);
+    await tester.pumpAndSettle();
+    await tester.tap(resendButton);
+    await tester.pump();
+
+    expect(
+      find.textContaining('şu anda gönderilemedi'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('unexpected_failure'), findsNothing);
   });
 }

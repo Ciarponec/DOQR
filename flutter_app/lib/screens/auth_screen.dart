@@ -226,6 +226,10 @@ class _AuthScreenState extends State<AuthScreen> {
       if (!mounted) return;
       final rateLimited = exception.statusCode == '429' ||
           exception.code == 'over_email_send_rate_limit';
+      final emailServiceFailed = exception.code == 'unexpected_failure' ||
+          exception.message
+              .toLowerCase()
+              .contains('error sending confirmation email');
       if (rateLimited) {
         _startResendCooldown(
           mail,
@@ -234,6 +238,11 @@ class _AuthScreenState extends State<AuthScreen> {
             'Wait 60 seconds before requesting another verification email.',
           ),
         );
+      } else if (emailServiceFailed) {
+        setState(() => error = context.tr(
+              'Doğrulama e-postası şu anda gönderilemedi. Lütfen biraz sonra tekrar dene.',
+              'The verification email could not be sent right now. Please try again shortly.',
+            ));
       } else {
         setState(() => error = exception.message);
       }

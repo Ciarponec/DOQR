@@ -59,6 +59,17 @@ class SettingsScreen extends StatelessWidget {
     }
   }
 
+  Future<void> _signOut(BuildContext context) async {
+    await onSignOut();
+    if (!context.mounted) return;
+
+    // The settings route remains visible even after AuthGate receives the
+    // signed-out event. Clear the authenticated route stack so the existing
+    // root AuthGate—and therefore the login screen—is revealed immediately.
+    Navigator.of(context, rootNavigator: true)
+        .popUntil((route) => route.isFirst);
+  }
+
   @override
   Widget build(BuildContext context) => AppShell(
         title: context.tr('Ayarlar', 'Settings'),
@@ -100,7 +111,7 @@ class SettingsScreen extends StatelessWidget {
             ListTile(
               leading: const Icon(Icons.logout_rounded),
               title: Text(context.tr('Çıkış yap', 'Sign out')),
-              onTap: onSignOut,
+              onTap: () => _signOut(context),
             ),
             const Divider(),
             ListTile(

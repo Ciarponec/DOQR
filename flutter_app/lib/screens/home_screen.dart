@@ -86,8 +86,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Future<void> _signOut() async {
     await NotificationService.instance.stopForLogout();
     await Supabase.instance.client.auth.signOut();
-    if (!mounted) return;
-    Navigator.of(context).pushNamedAndRemoveUntil('/', (_) => false);
   }
 
   Future<void> _deleteAccount() async {
