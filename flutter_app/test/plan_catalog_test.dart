@@ -73,18 +73,12 @@ void main() {
     ));
 
     expect(find.text('Mevcut planın: Pro Deneme'), findsOneWidget);
+    expect(find.textContaining('bir App Store aboneliği değildir'), findsOneWidget);
     expect(find.text('Free'), findsOneWidget);
     expect(find.text('Pro'), findsOneWidget);
     // The purchase UI must not hardcode a storefront price. StoreKit replaces
     // this fallback with the user's localized App Store price on device.
     expect(find.textContaining('Mağazada gösterilir'), findsWidgets);
-    await tester.scrollUntilVisible(
-      find.text('DOQR Pro Yıllık'),
-      300,
-      scrollable: find.byType(Scrollable).first,
-    );
-    expect(find.text('DOQR Pro Yıllık'), findsOneWidget);
-    expect(find.textContaining('Süre: 1 yıl'), findsOneWidget);
     expect(
       tester.getCenter(find.text('Free')).dx,
       lessThan(tester.getCenter(find.text('Pro')).dx),
@@ -93,6 +87,75 @@ void main() {
       tester.getTopLeft(find.text('Free')).dy,
       closeTo(tester.getTopLeft(find.text('Pro')).dy, 2),
     );
+    await tester.scrollUntilVisible(
+      find.text('DOQR Pro Yıllık'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('DOQR Pro Yıllık'), findsOneWidget);
+    expect(find.textContaining('Süre: 1 yıl'), findsOneWidget);
+    final trialPurchaseButton =
+        find.textContaining('Pro aboneliğini başlat');
+    for (var i = 0; i < 10 && trialPurchaseButton.evaluate().isEmpty; i++) {
+      await tester.drag(
+        find.byType(Scrollable).first,
+        const Offset(0, -150),
+      );
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    expect(trialPurchaseButton, findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('ücretli Pro planında satın alma düğmesi kapanır',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final languageController = AppLanguageController();
+    addTearDown(languageController.dispose);
+
+    const paidPlan = PlanItem(
+      id: 'pro',
+      displayName: 'Pro',
+      annualPriceUsdCents: 1499,
+      maxDoors: 3,
+      maxHostsPerDoor: 3,
+      logRetentionDays: 90,
+      logRetentionCount: null,
+      monthlyAudioSeconds: 7200,
+      monthlyVideoSeconds: 3600,
+      features: {},
+      subscriptionStatus: 'active',
+      currentPeriodEnd: null,
+      trialEndsAt: null,
+      isTrial: false,
+    );
+
+    await tester.pumpWidget(AppLanguageScope(
+      controller: languageController,
+      child: MaterialApp(
+        locale: const Locale('tr'),
+        supportedLocales: const [Locale('tr'), Locale('en')],
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        theme: buildDoqrTheme(),
+        home: const PlansScreen(currentPlan: paidPlan),
+      ),
+    ));
+
+    expect(find.text('Mevcut planın: Pro'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Pro planın aktif'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    final button = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Pro planın aktif'),
+    );
+    expect(button.onPressed, isNull);
     expect(tester.takeException(), isNull);
   });
 

@@ -83,9 +83,13 @@ class _PlansScreenState extends State<PlansScreen> {
                 : _store.processing
                     ? context.tr('Mağaza onayı bekleniyor…',
                         'Waiting for store approval…')
-                    : context.tr(
-                        "Pro'yu Satın Al • ${_store.displayPrice} / yıl",
-                        'Buy Pro • ${_store.displayPrice} / year')),
+                    : widget.currentPlan.isTrial
+                        ? context.tr(
+                            'Pro aboneliğini başlat • ${_store.displayPrice} / yıl',
+                            'Start Pro subscription • ${_store.displayPrice} / year')
+                        : context.tr(
+                            "Pro'yu Satın Al • ${_store.displayPrice} / yıl",
+                            'Buy Pro • ${_store.displayPrice} / year')),
           ),
           if (_store.loading) ...[
             const SizedBox(height: 10),
@@ -251,8 +255,8 @@ class _CurrentPlanCard extends StatelessWidget {
   String description(BuildContext context) {
     if (plan.isTrial) {
       return context.tr(
-          '3 günlük Pro denemen devam ediyor. Deneme sona erdiğinde hesabın otomatik olarak Free plana geçecek.',
-          'Your 3-day Pro trial is active. Your account will automatically switch to Free when it ends.');
+          "3 günlük ücretsiz Pro denemen devam ediyor. Bu bir App Store aboneliği değildir. Ücretli abonelik tamamlandığında bu alan 'Mevcut planın: Pro' olarak değişir ve satın alma düğmesi kapanır.",
+          "Your free 3-day Pro trial is active. This is not an App Store subscription. After a paid subscription is completed, this area changes to 'Current plan: Pro' and the purchase button is disabled.");
     }
     if (plan.isPro) {
       return context.tr(

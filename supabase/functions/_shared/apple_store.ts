@@ -1,44 +1,50 @@
-/// <reference types="npm:@types/node" />
-
-import { Buffer } from "node:buffer";
-import { X509Certificate } from "node:crypto";
-import {
-  Environment,
-  SignedDataVerifier,
-  VerificationException,
-  VerificationStatus,
-  type JWSRenewalInfoDecodedPayload,
-  type JWSTransactionDecodedPayload,
-  type ResponseBodyV2DecodedPayload,
-} from "npm:@apple/app-store-server-library@3.1.0";
+import "npm:reflect-metadata@0.2.2";
+import { X509Certificate } from "npm:@peculiar/x509@2.0.0";
+import { compactVerify, decodeJwt, decodeProtectedHeader } from "jsr:@panva/jose@6";
 
 import { HttpError } from "./utils.ts";
 
-// Apple's Node verifier uses X509Certificate#toString() while checking and
-// caching the certificate chain embedded in StoreKit JWS payloads. The hosted
-// Supabase Edge Runtime currently exposes X509Certificate and its `raw` DER
-// bytes, but its Node compatibility layer throws ERR_NOT_IMPLEMENTED from
-// toString(). Supply the same PEM representation returned by Node so the
-// official verifier can complete certificate-chain and signature validation.
-//
-// Keep this compatibility shim next to the verifier import so it also covers
-// App Store Server Notifications, which use the same shared module.
-function certificatePem(certificate: X509Certificate): string {
-  const base64 = Buffer.from(certificate.raw).toString("base64");
-  const lines = base64.match(/.{1,64}/g) ?? [];
-  return `-----BEGIN CERTIFICATE-----\n${lines.join("\n")}\n-----END CERTIFICATE-----\n`;
-}
-
-Object.defineProperty(X509Certificate.prototype, "toString", {
-  configurable: true,
-  writable: true,
-  value(this: X509Certificate) {
-    return certificatePem(this);
-  },
-});
-
 export const APPLE_BUNDLE_ID = "com.doqr.app";
 export const APPLE_PRO_PRODUCT_ID = "doqr_pro_annual";
+
+type AppleEnvironment = "Sandbox" | "Production";
+
+export interface AppleTransactionPayload {
+  appAccountToken?: string;
+  bundleId?: string;
+  environment?: AppleEnvironment;
+  expiresDate?: number;
+  originalTransactionId?: string;
+  productId?: string;
+  revocationDate?: number;
+  signedDate?: number;
+  transactionId?: string;
+  type?: string;
+  [key: string]: unknown;
+}
+
+export interface AppleRenewalInfoPayload {
+  autoRenewStatus?: number;
+  environment?: AppleEnvironment;
+  gracePeriodExpiresDate?: number;
+  signedDate?: number;
+  [key: string]: unknown;
+}
+
+export interface AppleNotificationPayload {
+  data?: {
+    appAppleId?: number;
+    bundleId?: string;
+    environment?: AppleEnvironment;
+    signedRenewalInfo?: string;
+    signedTransactionInfo?: string;
+    [key: string]: unknown;
+  };
+  notificationType?: string;
+  signedDate?: number;
+  subtype?: string;
+  [key: string]: unknown;
+}
 
 // DER-encoded Apple root certificates, downloaded from Apple's PKI page on
 // 2026-08-10. Keeping the roots in the function bundle avoids trusting a
@@ -50,26 +56,17 @@ const APPLE_ROOT_CERTIFICATES = [
   "MIICQzCCAcmgAwIBAgIILcX8iNLFS5UwCgYIKoZIzj0EAwMwZzEbMBkGA1UEAwwSQXBwbGUgUm9vdCBDQSAtIEczMSYwJAYDVQQLDB1BcHBsZSBDZXJ0aWZpY2F0aW9uIEF1dGhvcml0eTETMBEGA1UECgwKQXBwbGUgSW5jLjELMAkGA1UEBhMCVVMwHhcNMTQwNDMwMTgxOTA2WhcNMzkwNDMwMTgxOTA2WjBnMRswGQYDVQQDDBJBcHBsZSBSb290IENBIC0gRzMxJjAkBgNVBAsMHUFwcGxlIENlcnRpZmljYXRpb24gQXV0aG9yaXR5MRMwEQYDVQQKDApBcHBsZSBJbmMuMQswCQYDVQQGEwJVUzB2MBAGByqGSM49AgEGBSuBBAAiA2IABJjpLz1AcqTtkyJygRMc3RCV8cWjTnHcFBbZDuWmBSp3ZHtfTjjTuxxEtX/1H7YyYl3J6YRbTzBPEVoA/VhYDKX1DyxNB0cTddqXl5dvMVztK517IDvYuVTZXpmkOlEKMaNCMEAwHQYDVR0OBBYEFLuw3qFYM4iapIqZ3r6966/ayySrMA8GA1UdEwEB/wQFMAMBAf8wDgYDVR0PAQH/BAQDAgEGMAoGCCqGSM49BAMDA2gAMGUCMQCD6cHEFl4aXTQY2e3v9GwOAEZLuN+yRhHFD/3meoyhpmvOwgPUnPWTxnS4at+qIxUCMG1mihDK1A3UT82NQz60imOlM27jbdoXt2QfyFMm+YhidDkLF1vLUagM6BgD56KyKA==",
 ];
 
-const verifiers = new Map<Environment, SignedDataVerifier>();
+const APPLE_LEAF_EXTENSION = "1.2.840.113635.100.6.11.1";
+const APPLE_INTERMEDIATE_EXTENSION = "1.2.840.113635.100.6.2.1";
+const APPLE_JWS_ALGORITHM = "ES256";
+const CLOCK_SKEW_MS = 60_000;
 
-function decodePayloadWithoutVerification(value: string): Record<string, unknown> {
-  const parts = value.split(".");
-  if (parts.length !== 3) {
-    throw new HttpError(400, "Geçersiz App Store imzası", "APPLE_JWS_INVALID");
-  }
-  try {
-    return JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
-  } catch {
-    throw new HttpError(400, "Geçersiz App Store imzası", "APPLE_JWS_INVALID");
-  }
-}
+const trustedRoots = APPLE_ROOT_CERTIFICATES.map((value) =>
+  new X509Certificate(value)
+);
 
-function environmentFromSignedData(value: string): Environment {
-  const payload = decodePayloadWithoutVerification(value);
-  const data = payload.data as Record<string, unknown> | undefined;
-  const valueFromPayload = data?.environment ?? payload.environment;
-  if (valueFromPayload === Environment.PRODUCTION) return Environment.PRODUCTION;
-  if (valueFromPayload === Environment.SANDBOX) return Environment.SANDBOX;
+function requireEnvironment(value: unknown): AppleEnvironment {
+  if (value === "Sandbox" || value === "Production") return value;
   throw new HttpError(
     400,
     "Desteklenmeyen App Store ortamı",
@@ -77,43 +74,129 @@ function environmentFromSignedData(value: string): Environment {
   );
 }
 
-function verifier(environment: Environment): SignedDataVerifier {
-  const cached = verifiers.get(environment);
-  if (cached) return cached;
-
-  let appAppleId: number | undefined;
-  if (environment === Environment.PRODUCTION) {
-    appAppleId = Number(Deno.env.get("APPLE_APP_ID"));
-    if (!Number.isSafeInteger(appAppleId) || appAppleId <= 0) {
-      throw new Error("Missing or invalid APPLE_APP_ID");
-    }
+function assertCertificateDate(
+  certificate: X509Certificate,
+  effectiveDate: Date,
+): void {
+  const timestamp = effectiveDate.getTime();
+  if (
+    certificate.notBefore.getTime() > timestamp + CLOCK_SKEW_MS ||
+    certificate.notAfter.getTime() < timestamp - CLOCK_SKEW_MS
+  ) {
+    throw new HttpError(
+      400,
+      "App Store sertifikasının geçerlilik süresi uygun değil",
+      "APPLE_CERTIFICATE_EXPIRED",
+    );
   }
-  const created = new SignedDataVerifier(
-    APPLE_ROOT_CERTIFICATES.map((value) => Buffer.from(value, "base64")),
-    true,
-    environment,
-    APPLE_BUNDLE_ID,
-    appAppleId,
-  );
-  verifiers.set(environment, created);
-  return created;
 }
 
-async function verified<T>(operation: () => Promise<T>): Promise<T> {
+async function verifyCertificateChain(
+  encodedChain: string[],
+  effectiveDate: Date,
+): Promise<X509Certificate> {
+  if (encodedChain.length !== 3) {
+    throw new HttpError(
+      400,
+      "App Store sertifika zinciri geçersiz",
+      "APPLE_CERTIFICATE_CHAIN_INVALID",
+    );
+  }
+
+  let leaf: X509Certificate;
+  let intermediate: X509Certificate;
   try {
-    return await operation();
+    leaf = new X509Certificate(encodedChain[0]);
+    intermediate = new X509Certificate(encodedChain[1]);
   } catch (error) {
-    if (error instanceof HttpError) throw error;
+    console.error("Apple certificate parsing failed", error);
+    throw new HttpError(
+      400,
+      "App Store sertifikası okunamadı",
+      "APPLE_CERTIFICATE_INVALID",
+    );
+  }
+
+  assertCertificateDate(leaf, effectiveDate);
+  assertCertificateDate(intermediate, effectiveDate);
+  if (
+    leaf.issuer !== intermediate.subject ||
+    !leaf.getExtension(APPLE_LEAF_EXTENSION) ||
+    !intermediate.getExtension(APPLE_INTERMEDIATE_EXTENSION) ||
+    !(await leaf.verify({ publicKey: intermediate.publicKey }))
+  ) {
+    throw new HttpError(
+      400,
+      "App Store sertifika zinciri doğrulanamadı",
+      "APPLE_CERTIFICATE_CHAIN_INVALID",
+    );
+  }
+
+  for (const root of trustedRoots) {
+    assertCertificateDate(root, effectiveDate);
     if (
-      error instanceof VerificationException &&
-      error.status === VerificationStatus.RETRYABLE_VERIFICATION_FAILURE
+      intermediate.issuer === root.subject &&
+      await intermediate.verify({ publicKey: root.publicKey })
     ) {
+      return leaf;
+    }
+  }
+  throw new HttpError(
+    400,
+    "App Store sertifika zinciri güvenilir bir Apple köküne ulaşmıyor",
+    "APPLE_CERTIFICATE_CHAIN_INVALID",
+  );
+}
+
+function parseJsonObject(value: Uint8Array): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(new TextDecoder().decode(value));
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("JWS payload is not an object");
+    }
+    return parsed as Record<string, unknown>;
+  } catch (error) {
+    console.error("Apple JWS payload parsing failed", error);
+    throw new HttpError(400, "Geçersiz App Store imzası", "APPLE_JWS_INVALID");
+  }
+}
+
+async function verifySignedData<T extends Record<string, unknown>>(
+  signedData: string,
+): Promise<T> {
+  const parts = signedData.split(".");
+  if (parts.length !== 3) {
+    throw new HttpError(400, "Geçersiz App Store imzası", "APPLE_JWS_INVALID");
+  }
+
+  try {
+    const header = decodeProtectedHeader(signedData);
+    if (header.alg !== APPLE_JWS_ALGORITHM || !Array.isArray(header.x5c)) {
       throw new HttpError(
-        503,
-        "App Store doğrulaması geçici olarak kullanılamıyor",
-        "APPLE_VERIFY_RETRYABLE",
+        400,
+        "App Store imza başlığı geçersiz",
+        "APPLE_JWS_INVALID",
       );
     }
+    const unverifiedPayload = decodeJwt(signedData) as Record<string, unknown>;
+    const signedDate = typeof unverifiedPayload.signedDate === "number"
+      ? new Date(unverifiedPayload.signedDate)
+      : null;
+    if (signedDate != null && !Number.isFinite(signedDate.getTime())) {
+      throw new HttpError(400, "Geçersiz App Store tarihi", "APPLE_JWS_INVALID");
+    }
+
+    const leaf = await verifyCertificateChain(header.x5c, new Date());
+    const publicKey = await leaf.publicKey.export(
+      { name: "ECDSA", namedCurve: "P-256" },
+      ["verify"],
+    );
+    const verified = await compactVerify(signedData, publicKey, {
+      algorithms: [APPLE_JWS_ALGORITHM],
+    });
+    return parseJsonObject(verified.payload) as T;
+  } catch (error) {
+    if (error instanceof HttpError) throw error;
     console.error("Apple signed-data verification failed", error);
     throw new HttpError(
       400,
@@ -123,29 +206,51 @@ async function verified<T>(operation: () => Promise<T>): Promise<T> {
   }
 }
 
+function expectedAppAppleId(): number {
+  const value = Number(Deno.env.get("APPLE_APP_ID"));
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new Error("Missing or invalid APPLE_APP_ID");
+  }
+  return value;
+}
+
 export async function verifyAppleTransaction(
   signedTransaction: string,
-): Promise<JWSTransactionDecodedPayload> {
-  const environment = environmentFromSignedData(signedTransaction);
-  return await verified(() =>
-    verifier(environment).verifyAndDecodeTransaction(signedTransaction)
+): Promise<AppleTransactionPayload> {
+  const transaction = await verifySignedData<AppleTransactionPayload>(
+    signedTransaction,
   );
+  const environment = requireEnvironment(transaction.environment);
+  if (transaction.bundleId !== APPLE_BUNDLE_ID) {
+    throw new HttpError(400, "App Store uygulama kimliği eşleşmiyor", "APPLE_APP_MISMATCH");
+  }
+  if (environment === "Production") expectedAppAppleId();
+  return transaction;
 }
 
 export async function verifyAppleNotification(
   signedPayload: string,
-): Promise<ResponseBodyV2DecodedPayload> {
-  const environment = environmentFromSignedData(signedPayload);
-  return await verified(() =>
-    verifier(environment).verifyAndDecodeNotification(signedPayload)
-  );
+): Promise<AppleNotificationPayload> {
+  const notification = await verifySignedData<AppleNotificationPayload>(signedPayload);
+  const environment = requireEnvironment(notification.data?.environment);
+  if (notification.data?.bundleId !== APPLE_BUNDLE_ID) {
+    throw new HttpError(400, "App Store uygulama kimliği eşleşmiyor", "APPLE_APP_MISMATCH");
+  }
+  if (
+    environment === "Production" &&
+    notification.data?.appAppleId !== expectedAppAppleId()
+  ) {
+    throw new HttpError(400, "App Store uygulama kimliği eşleşmiyor", "APPLE_APP_MISMATCH");
+  }
+  return notification;
 }
 
 export async function verifyAppleRenewalInfo(
   signedRenewalInfo: string,
-): Promise<JWSRenewalInfoDecodedPayload> {
-  const environment = environmentFromSignedData(signedRenewalInfo);
-  return await verified(() =>
-    verifier(environment).verifyAndDecodeRenewalInfo(signedRenewalInfo)
+): Promise<AppleRenewalInfoPayload> {
+  const renewal = await verifySignedData<AppleRenewalInfoPayload>(
+    signedRenewalInfo,
   );
+  requireEnvironment(renewal.environment);
+  return renewal;
 }

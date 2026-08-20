@@ -69,8 +69,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           : ((endsAt.difference(DateTime.now()).inHours + 23) ~/ 24)
               .clamp(0, 999);
       return context.isEnglish
-          ? 'DOQR (Pro • $days days)'
-          : 'DOQR (Pro • $days gün)';
+          ? 'DOQR (Pro Trial • $days days)'
+          : 'DOQR (Pro Deneme • $days gün)';
     }
     return plan.isPro ? 'DOQR (Pro)' : 'DOQR (Free)';
   }
