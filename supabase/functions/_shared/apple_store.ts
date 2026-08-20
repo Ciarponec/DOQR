@@ -1,6 +1,7 @@
 /// <reference types="npm:@types/node" />
 
 import { Buffer } from "node:buffer";
+import { X509Certificate } from "node:crypto";
 import {
   Environment,
   SignedDataVerifier,
@@ -12,6 +13,29 @@ import {
 } from "npm:@apple/app-store-server-library@3.1.0";
 
 import { HttpError } from "./utils.ts";
+
+// Apple's Node verifier uses X509Certificate#toString() while checking and
+// caching the certificate chain embedded in StoreKit JWS payloads. The hosted
+// Supabase Edge Runtime currently exposes X509Certificate and its `raw` DER
+// bytes, but its Node compatibility layer throws ERR_NOT_IMPLEMENTED from
+// toString(). Supply the same PEM representation returned by Node so the
+// official verifier can complete certificate-chain and signature validation.
+//
+// Keep this compatibility shim next to the verifier import so it also covers
+// App Store Server Notifications, which use the same shared module.
+function certificatePem(certificate: X509Certificate): string {
+  const base64 = Buffer.from(certificate.raw).toString("base64");
+  const lines = base64.match(/.{1,64}/g) ?? [];
+  return `-----BEGIN CERTIFICATE-----\n${lines.join("\n")}\n-----END CERTIFICATE-----\n`;
+}
+
+Object.defineProperty(X509Certificate.prototype, "toString", {
+  configurable: true,
+  writable: true,
+  value(this: X509Certificate) {
+    return certificatePem(this);
+  },
+});
 
 export const APPLE_BUNDLE_ID = "com.doqr.app";
 export const APPLE_PRO_PRODUCT_ID = "doqr_pro_annual";
