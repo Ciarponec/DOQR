@@ -5,7 +5,7 @@ workflows:
     integrations:
       app_store_connect: Yummy ASC key
     environment:
-      flutter: stable
+      flutter: 3.44.4
       xcode: 26.4
       cocoapods: default
       ios_signing:
@@ -40,14 +40,15 @@ workflows:
       - name: Build signed IPA
         script: |
           cd flutter_app
+          # Read the marketing version and build number from pubspec.yaml.
           flutter build ipa --release \
-            --build-name=1.0.0 \
-            --build-number=9 \
             --export-options-plist=/Users/builder/export_options.plist
     publishing:
       app_store_connect:
         # Reuse the App Store Connect integration configured in Codemagic.
         auth: integration
+        submit_to_testflight: false
+        submit_to_app_store: false
     artifacts:
       - flutter_app/build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
