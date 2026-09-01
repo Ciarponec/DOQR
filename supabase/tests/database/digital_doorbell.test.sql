@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(27);
+select plan(29);
 
 select ok(
   has_table_privilege('service_role', 'public.users', 'INSERT'),
@@ -60,6 +60,18 @@ select ok(
     'EXECUTE'
   ),
   'Anonymous API role cannot execute the private ring helper'
+);
+select ok(
+  to_regprocedure('public.can_access_ring_realtime(text, boolean)') is null,
+  'Realtime authorization helper is not exposed as a public RPC'
+);
+select ok(
+  has_function_privilege(
+    'authenticated',
+    'private.can_access_ring_realtime(text, boolean)',
+    'EXECUTE'
+  ),
+  'Realtime policies can execute the private authorization helper'
 );
 select ok(
   has_function_privilege(
