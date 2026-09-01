@@ -1,0 +1,9 @@
+flutter_launcher_icons:
+  image_path: assets/doqr_icon.png
+  android: false
+  ios: false
+  web:
+    generate: true
+    image_path: assets/doqr_icon.png
+    background_color: "#111936"
+    theme_color: "#111936"

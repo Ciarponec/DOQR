@@ -7,15 +7,21 @@ Bağlı Supabase projesinin DOQR proje ref'i olduğundan emin olun. Başka bir p
 ```powershell
 supabase start
 supabase db reset --local
+supabase test db --local
+supabase db lint --local --level warning
 deno check supabase/functions/*/index.ts
 node --check visitor_web/app.js
+node --check visitor_web/i18n.js
 cd flutter_app
 flutter pub get
 flutter analyze
-flutter test
+flutter test --coverage
+flutter build web --release
+flutter build apk --debug
 ```
 
 Docker Desktop, `supabase start` ve migration entegrasyon testi için çalışır durumda olmalıdır.
+CI aynı kontrolleri Linux üzerinde tekrarlar ve satır kapsamının yüzde 30'un altına düşmesine izin vermez.
 
 ## 2. Edge Function sırları
 
@@ -45,6 +51,8 @@ TURN kullanımı yalnızca bir medya oturumu başlatılırken Cloudflare Analyti
 
 `SUPABASE_URL` ile service-role/secret key barındırılan Edge Runtime tarafından sağlanır. Eski projelerde gerekirse `SUPABASE_ANON_KEY` ve `SUPABASE_SERVICE_ROLE_KEY` kullanılabilir. Turnstile açılacaksa Supabase Auth CAPTCHA ayarı ile `TURNSTILE_SITE_KEY` birlikte yapılandırılmalıdır.
 
+Dağıtımdan önce `supabase secrets list --project-ref <project-ref>` ile adları kontrol edin. Çıktıyı log veya destek kaydına kopyalamayın. Yerel geliştirmede `supabase/functions/.env.example` dosyasını örnek alın; gerçek `.env` dosyası Git tarafından yok sayılır.
+
 `APPLE_APP_ID`, App Store Connect'te uygulama oluşturulduğunda atanan sayısal Apple ID'dir. StoreKit 2 işlemleri ve App Store Server Notifications V2 payload'ları Apple'ın sertifika zinciriyle doğrulanır; App Store Connect API özel anahtarı istemciye veya repoya eklenmez.
 
 ## 3. Backend deploy
@@ -63,7 +71,7 @@ https://<project-ref>.supabase.co/functions/v1/apple-store-notifications
 
 Endpoint JWT istemez; bunun yerine Apple'ın `signedPayload` JWS imzasını, `com.doqr.app` bundle ID'sini ve `APPLE_APP_ID` değerini doğrular. App Store Connect'ten bir test bildirimi gönderip HTTP 200 alındığını Edge Function loglarında kontrol edin.
 
-`20260809231851_low_io_media_guard.sql` migration'ı eski dakika cron'unu, Vault sırrını, `pg_cron` ve `pg_net` uzantılarını kaldırır. Rate-limit durumu her kapsam için tek satırdır; zaman pencereleri yeni satır üretmez. Periyodik temizlik görevi kurulmaz. İşlemden sonra Supabase Database Advisors güvenlik ve performans uyarıları kontrol edilmelidir.
+`20260809231851_low_io_media_guard.sql` migration'ı eski dakika cron'unu, Vault sırrını, `pg_cron` ve `pg_net` uzantılarını kaldırır. `20260901115532_atomic_media_usage.sql` medya kullanımını atomik RPC ile günceller; `20260901123722_service_role_table_access.sql` Edge Function servis rolünün uygulama tablolarındaki gerekli yetkilerini açıkça tanımlar. Rate-limit durumu her kapsam için tek satırdır; zaman pencereleri yeni satır üretmez. Periyodik temizlik görevi kurulmaz. İşlemden sonra Supabase Database Advisors güvenlik ve performans uyarıları kontrol edilmelidir.
 
 ## 4. Visitor web
 
@@ -88,7 +96,7 @@ Supabase değerleri DOQR projesi için varsayılan olarak gömülüdür; bu komu
 
 Firebase istemci yapılandırması `android/app/google-services.json` ile `ios/Runner/GoogleService-Info.plist` dosyalarından okunur; Firebase için `--dart-define` kullanılmaz. Android application ID ve iOS bundle ID `com.doqr.app` değerindedir. iOS için APNs `.p8` anahtarı Firebase Cloud Messaging ekranına yüklenmeli; Apple Developer hesabında bu App ID için Push Notifications yetkisi açık olmalıdır. Backend bildirimi için Firebase **Service accounts > Generate new private key** ile alınan ayrı service-account JSON'u `FIREBASE_SERVICE_ACCOUNT_JSON` sırrına koyun. Bu özel anahtar hiçbir zaman repoya veya istemci uygulamasına eklenmez. Android release imzası yayın öncesi tamamlanmalıdır.
 
-Uygulama içinden Türkçe ve İngilizce seçilebilir; tercih cihazda saklanır. iOS paketi `en` ve `tr` yerelleştirmelerini ilan eder ve kamera/mikrofon izin açıklamalarını sistem diline göre gösterir.
+Uygulama ve ziyaretçi web arayüzünde Türkçe, İngilizce ve Rusça seçilebilir; tercih cihazda saklanır. iOS paketi `en`, `tr` ve `ru` yerelleştirmelerini ilan eder ve kamera/mikrofon izin açıklamalarını sistem diline göre gösterir.
 
 iOS release arşivi macOS üzerinde Xcode 26 veya daha yenisi ve iOS 26 SDK ile alınmalıdır. `flutter pub get` sonrasında `ios/` içinde `pod install --repo-update` çalıştırın ve `Runner.xcworkspace` dosyasını açın. Team/Automatic Signing seçimi geliştirici hesabına bağlı olduğundan Xcode'da tamamlanmalıdır. App Store metadata, privacy cevapları, inceleme şablonu ve görseller `store_assets/app_store/` klasöründedir.
 
@@ -107,3 +115,5 @@ iOS release arşivi macOS üzerinde Xcode 26 veya daha yenisi ve iOS 26 SDK ile 
 11. İptal edilmiş QR, başka ring/chat verisi ve başka kapının özel Realtime kanalına erişemez.
 12. Sandbox `doqr_pro_annual` satın alımı Apple imzasıyla doğrulanır ve aynı Apple hesabında “Satın almayı geri yükle” çalışır.
 13. App Store Server Notifications test, yenileme, iptal ve süre sonu olayları `user_subscriptions.current_period_end` değerini doğru günceller.
+14. Türkçe, İngilizce ve Rusça akışlarda kayıt, şifre sıfırlama, kapı/QR yönetimi, paylaşım ve ziyaretçi onay metinleri taşma olmadan kontrol edilir.
+15. Ekran okuyucu etiketleri, klavye odağı, yüzde 160 metin ölçeği, azaltılmış hareket ve 320 px genişlikte temel akışlar doğrulanır.

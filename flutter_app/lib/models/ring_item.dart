@@ -30,7 +30,9 @@ class RingItem {
   });
 
   bool get isActive =>
-      status == 'pending' || status == 'media_requested' || status == 'accepted';
+      status == 'pending' ||
+      status == 'media_requested' ||
+      status == 'accepted';
   String get activeMode => acceptedMode ?? requestedMode;
   bool get usesMedia => activeMode == 'audio' || activeMode == 'video';
 

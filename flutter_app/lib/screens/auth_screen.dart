@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../l10n/app_language.dart';
 import '../app_config.dart';
 import '../ui/app_theme.dart';
+import '../services/user_error.dart';
 import '../widgets/app_shell.dart';
 
 abstract class AuthGateway {
@@ -18,6 +19,8 @@ abstract class AuthGateway {
   Future<void> signIn({required String email, required String password});
 
   Future<void> resendSignupConfirmation({required String email});
+
+  Future<void> sendPasswordReset({required String email});
 
   Future<void> savePendingConfirmationEmail(String email);
 
@@ -73,6 +76,13 @@ class SupabaseAuthGateway implements AuthGateway {
       );
 
   @override
+  Future<void> sendPasswordReset({required String email}) =>
+      Supabase.instance.client.auth.resetPasswordForEmail(
+        email,
+        redirectTo: kIsWeb ? Uri.base.toString() : AppConfig.authRedirectUrl,
+      );
+
+  @override
   Future<void> savePendingConfirmationEmail(String email) async {
     final preferences = await SharedPreferences.getInstance();
     await preferences.setString(_pendingEmailKey, email);
@@ -112,6 +122,7 @@ class _AuthScreenState extends State<AuthScreen> {
   bool obscure = true;
   bool createMode = false;
   bool resending = false;
+  bool resettingPassword = false;
   int resendSeconds = 0;
   String? error;
   String? info;
@@ -244,7 +255,7 @@ class _AuthScreenState extends State<AuthScreen> {
               'The verification email could not be sent right now. Please try again shortly.',
             ));
       } else {
-        setState(() => error = exception.message);
+        setState(() => error = userErrorMessage(exception));
       }
     } catch (_) {
       if (mounted) {
@@ -290,6 +301,7 @@ class _AuthScreenState extends State<AuthScreen> {
               context.tr(
                 'Doğrulama bağlantısını $mail adresine gönderdik. Bağlantı 60 dakika geçerlidir; gelen kutunu ve spam klasörünü kontrol et.',
                 'We sent a verification link to $mail. The link is valid for 60 minutes; check your inbox and spam folder.',
+                'Ссылка для подтверждения отправлена на $mail и действует 60 минут. Проверьте входящие и папку «Спам».',
               ),
             );
           }
@@ -308,7 +320,7 @@ class _AuthScreenState extends State<AuthScreen> {
         await authGateway.savePendingConfirmationEmail(mail);
         _showResendForUnconfirmedAccount(mail);
       } else {
-        setState(() => error = exception.message);
+        setState(() => error = userErrorMessage(exception));
       }
     } catch (_) {
       if (mounted) {
@@ -318,6 +330,36 @@ class _AuthScreenState extends State<AuthScreen> {
       }
     } finally {
       if (mounted) setState(() => loading = false);
+    }
+  }
+
+  Future<void> _requestPasswordReset() async {
+    final mail = email.text.trim();
+    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(mail)) {
+      return setState(() => error = context.tr(
+          'Önce geçerli e-posta adresinizi girin.',
+          'Enter your valid email address first.',
+          'Сначала введите действительный адрес электронной почты.'));
+    }
+    setState(() {
+      resettingPassword = true;
+      error = null;
+      info = null;
+    });
+    try {
+      await authGateway.sendPasswordReset(email: mail);
+      if (mounted) {
+        setState(() => info = context.tr(
+            'Parola sıfırlama bağlantısını $mail adresine gönderdik. Gelen kutunuzu ve spam klasörünü kontrol edin.',
+            'We sent a password reset link to $mail. Check your inbox and spam folder.',
+            'Ссылка для сброса пароля отправлена на $mail. Проверьте входящие и папку «Спам».'));
+      }
+    } on AuthException catch (exception) {
+      if (mounted) setState(() => error = userErrorMessage(exception));
+    } catch (exception) {
+      if (mounted) setState(() => error = userErrorMessage(exception));
+    } finally {
+      if (mounted) setState(() => resettingPassword = false);
     }
   }
 
@@ -420,8 +462,10 @@ class _AuthScreenState extends State<AuthScreen> {
                               createMode
                                   ? context.tr('Ücretsiz hesap oluştur',
                                       'Create a free account')
-                                  : context.tr('Host hesabına giriş yap',
-                                      'Sign in to your host account'),
+                                  : context.tr(
+                                      'Kapı yöneticisi hesabına giriş yap',
+                                      'Sign in to your door manager account',
+                                      'Войдите в учётную запись управляющего дверью'),
                               style: Theme.of(context).textTheme.headlineSmall),
                           const SizedBox(height: 5),
                           Text(
@@ -431,7 +475,10 @@ class _AuthScreenState extends State<AuthScreen> {
                                       : 'Dijital zilini ve gelen ziyaretçileri yönet.',
                                   createMode
                                       ? 'Create your doorbell and try Pro features for the first 3 days.'
-                                      : 'Manage your doorbell and incoming visitors.'),
+                                      : 'Manage your doorbell and incoming visitors.',
+                                  createMode
+                                      ? 'Создайте дверной звонок и пользуйтесь Pro первые 3 дня.'
+                                      : 'Управляйте дверным звонком и входящими посетителями.'),
                               style: Theme.of(context)
                                   .textTheme
                                   .bodyMedium
@@ -478,6 +525,26 @@ class _AuthScreenState extends State<AuthScreen> {
                                     ),
                                   ),
                                 ),
+                                if (!createMode)
+                                  Align(
+                                    alignment: Alignment.centerRight,
+                                    child: TextButton(
+                                      onPressed: loading || resettingPassword
+                                          ? null
+                                          : _requestPasswordReset,
+                                      child: resettingPassword
+                                          ? const SizedBox(
+                                              width: 18,
+                                              height: 18,
+                                              child: CircularProgressIndicator(
+                                                  strokeWidth: 2),
+                                            )
+                                          : Text(context.tr(
+                                              'Şifremi unuttum',
+                                              'Forgot password',
+                                              'Забыли пароль?')),
+                                    ),
+                                  ),
                               ],
                             ),
                           ),
@@ -505,7 +572,8 @@ class _AuthScreenState extends State<AuthScreen> {
                                 label: Text(resendSeconds > 0
                                     ? context.tr(
                                         '$resendSeconds sn sonra yeniden gönder',
-                                        'Resend in $resendSeconds sec')
+                                        'Resend in $resendSeconds sec',
+                                        'Повторить через $resendSeconds сек.')
                                     : context.tr(
                                         'Doğrulama e-postasını yeniden gönder',
                                         'Resend verification email')),
@@ -549,6 +617,139 @@ class _AuthScreenState extends State<AuthScreen> {
                     ),
                   ],
                 ),
+              ),
+            ),
+          ),
+        ),
+      );
+}
+
+class ResetPasswordScreen extends StatefulWidget {
+  const ResetPasswordScreen({super.key});
+
+  @override
+  State<ResetPasswordScreen> createState() => _ResetPasswordScreenState();
+}
+
+class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
+  final password = TextEditingController();
+  final confirmation = TextEditingController();
+  bool obscure = true;
+  bool loading = false;
+  String? error;
+
+  @override
+  void dispose() {
+    password.dispose();
+    confirmation.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (password.text.length < 8) {
+      return setState(() => error = context.tr(
+          'Yeni şifre en az 8 karakter olmalı.',
+          'The new password must be at least 8 characters.',
+          'Новый пароль должен содержать не менее 8 символов.'));
+    }
+    if (password.text != confirmation.text) {
+      return setState(() => error = context.tr('Şifreler eşleşmiyor.',
+          'The passwords do not match.', 'Пароли не совпадают.'));
+    }
+    setState(() {
+      loading = true;
+      error = null;
+    });
+    try {
+      await Supabase.instance.client.auth.updateUser(
+        UserAttributes(password: password.text),
+      );
+      if (mounted) {
+        Navigator.of(context).pushNamedAndRemoveUntil('/home', (_) => false);
+      }
+    } catch (exception) {
+      if (mounted) setState(() => error = userErrorMessage(exception));
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        body: SafeArea(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 480),
+              child: ListView(
+                padding: const EdgeInsets.all(24),
+                children: [
+                  const SizedBox(height: 36),
+                  const SoftIcon(Icons.lock_reset_rounded, size: 72),
+                  const SizedBox(height: 22),
+                  Text(
+                    context.tr('Yeni şifre belirleyin', 'Set a new password',
+                        'Задайте новый пароль'),
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.headlineMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    context.tr(
+                        'Hesabınızı korumak için başka yerde kullanmadığınız güçlü bir şifre seçin.',
+                        'Choose a strong password that you do not use elsewhere.',
+                        'Выберите надёжный пароль, который вы не используете в других сервисах.'),
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodyMedium
+                        ?.copyWith(color: AppColors.muted),
+                  ),
+                  const SizedBox(height: 24),
+                  TextField(
+                    controller: password,
+                    obscureText: obscure,
+                    autofillHints: const [AutofillHints.newPassword],
+                    decoration: InputDecoration(
+                      labelText: context.tr(
+                          'Yeni şifre', 'New password', 'Новый пароль'),
+                      helperText: context.tr('En az 8 karakter.',
+                          'At least 8 characters.', 'Не менее 8 символов.'),
+                      prefixIcon: const Icon(Icons.lock_outline_rounded),
+                      suffixIcon: IconButton(
+                        onPressed: () => setState(() => obscure = !obscure),
+                        icon: Icon(obscure
+                            ? Icons.visibility_outlined
+                            : Icons.visibility_off_outlined),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: confirmation,
+                    obscureText: obscure,
+                    onSubmitted: (_) => loading ? null : _save(),
+                    decoration: InputDecoration(
+                      labelText: context.tr('Yeni şifreyi doğrulayın',
+                          'Confirm new password', 'Повторите новый пароль'),
+                      prefixIcon: const Icon(Icons.verified_user_outlined),
+                    ),
+                  ),
+                  if (error != null)
+                    _Message(text: error!, color: AppColors.danger),
+                  const SizedBox(height: 20),
+                  FilledButton(
+                    onPressed: loading ? null : _save,
+                    child: loading
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2.5, color: Colors.white),
+                          )
+                        : Text(context.tr('Şifreyi güncelle', 'Update password',
+                            'Обновить пароль')),
+                  ),
+                ],
               ),
             ),
           ),

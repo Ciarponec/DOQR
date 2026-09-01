@@ -23,6 +23,7 @@ Deno.serve(async (req) => {
     );
     const body = await readJson<Record<string, unknown>>(req);
     const doorId = cleanText(body.door_id, 36, true)!;
+    const replaceExisting = body.replace_existing === true;
     const expiresMinutes = body.expires_minutes == null
       ? null
       : Number(body.expires_minutes);
@@ -54,6 +55,13 @@ Deno.serve(async (req) => {
         "Yalnızca dijital zil sahibi QR kodu üretebilir",
         "FORBIDDEN",
       );
+    }
+
+    if (replaceExisting) {
+      const { error: revokeError } = await admin.from("door_public_tokens")
+        .update({ revoked_at: new Date().toISOString() })
+        .eq("door_id", doorId).is("revoked_at", null);
+      if (revokeError) throw new Error(revokeError.message);
     }
 
     const raw = randomSecret(32);

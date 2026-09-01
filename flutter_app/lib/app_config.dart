@@ -32,6 +32,15 @@ class AppConfig {
     );
   }
 
+  static Uri legalUrl(String page, String languageCode) {
+    final suffix = switch (languageCode) {
+      'en' => '-en',
+      'ru' => '-ru',
+      _ => '',
+    };
+    return Uri.parse(visitorBaseUrl).resolve('$page$suffix.html');
+  }
+
   static void validate() {
     if (supabaseUrl.isEmpty || supabaseKey.isEmpty) {
       throw StateError(

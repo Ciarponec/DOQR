@@ -6,17 +6,24 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import '../l10n/app_language.dart';
 import '../services/qr_pdf_service.dart';
+import '../services/user_error.dart';
 import '../ui/app_theme.dart';
 import '../widgets/app_shell.dart';
 
 class DoorQrScreen extends StatefulWidget {
   final String doorLabel;
   final String qrUrl;
+  final int activeQrCount;
+  final Future<String> Function()? onRotate;
+  final Future<void> Function()? onRevokeAll;
 
   const DoorQrScreen({
     super.key,
     required this.doorLabel,
     required this.qrUrl,
+    this.activeQrCount = 1,
+    this.onRotate,
+    this.onRevokeAll,
   });
 
   @override
@@ -29,10 +36,15 @@ class _DoorQrScreenState extends State<DoorQrScreen> {
   late final TextEditingController _sideTextController;
   QrPdfTemplate _template = QrPdfTemplate.minimal;
   bool _isPreparingPdf = false;
+  bool _isManagingQr = false;
+  late String _qrUrl;
+  late int _activeQrCount;
 
   @override
   void initState() {
     super.initState();
+    _qrUrl = widget.qrUrl;
+    _activeQrCount = widget.activeQrCount;
     _topTextController = TextEditingController();
     _bottomTextController = TextEditingController();
     _sideTextController = TextEditingController();
@@ -68,7 +80,7 @@ class _DoorQrScreenState extends State<DoorQrScreen> {
 
   Future<Uint8List> _buildPdf() => QrPdfService.build(
         doorLabel: widget.doorLabel,
-        qrUrl: widget.qrUrl,
+        qrUrl: _qrUrl,
         topText: _topTextController.text,
         bottomText: _bottomTextController.text,
         sideText: _sideTextController.text,
@@ -101,7 +113,7 @@ class _DoorQrScreenState extends State<DoorQrScreen> {
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(error.toString())),
+          SnackBar(content: Text(userErrorMessage(error))),
         );
       }
     } finally {
@@ -115,6 +127,90 @@ class _DoorQrScreenState extends State<DoorQrScreen> {
         .replaceAll(RegExp(r'[^a-zA-Z0-9_-]+'), '-')
         .replaceAll(RegExp(r'-+'), '-');
     return 'doqr-${safeLabel.isEmpty ? 'qr' : safeLabel}.pdf';
+  }
+
+  Future<bool> _confirm(String title, String message, String action) async =>
+      await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(title),
+          content: Text(message),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: Text(context.tr('Vazgeç', 'Cancel', 'Отмена'))),
+            FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: Text(action)),
+          ],
+        ),
+      ) ??
+      false;
+
+  Future<void> _rotateQr() async {
+    final callback = widget.onRotate;
+    if (callback == null ||
+        !await _confirm(
+          context.tr('QR kodu yenilensin mi?', 'Rotate the QR code?',
+              'Обновить QR-код?'),
+          context.tr(
+              'Eski QR çıktıları hemen geçersiz olur. Yeni kodu yeniden yazdırmanız gerekir.',
+              'Old QR printouts will stop working immediately. You will need to print the new code.',
+              'Старые распечатки сразу перестанут работать. Новый код потребуется распечатать заново.'),
+          context.tr('Yenile', 'Rotate', 'Обновить'),
+        )) {
+      return;
+    }
+    setState(() => _isManagingQr = true);
+    try {
+      final url = await callback();
+      if (mounted) {
+        setState(() {
+          _qrUrl = url;
+          _activeQrCount = 1;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(context.tr(
+                'Yeni QR kodu hazır. Eski kodlar iptal edildi.',
+                'The new QR code is ready. Old codes were revoked.',
+                'Новый QR-код готов. Старые коды отозваны.'))));
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(userErrorMessage(error))));
+      }
+    } finally {
+      if (mounted) setState(() => _isManagingQr = false);
+    }
+  }
+
+  Future<void> _revokeAllQr() async {
+    final callback = widget.onRevokeAll;
+    if (callback == null ||
+        !await _confirm(
+          context.tr('Tüm QR kodları iptal edilsin mi?', 'Revoke all QR codes?',
+              'Отозвать все QR-коды?'),
+          context.tr(
+              'Bu dijital zile ait hiçbir QR kodu yeni ziyaret başlatamayacak.',
+              'No QR code for this doorbell will be able to start a new visit.',
+              'Ни один QR-код этого звонка не сможет начать новый визит.'),
+          context.tr('Tümünü iptal et', 'Revoke all', 'Отозвать все'),
+        )) {
+      return;
+    }
+    setState(() => _isManagingQr = true);
+    try {
+      await callback();
+      if (mounted) Navigator.pop(context);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(userErrorMessage(error))));
+      }
+    } finally {
+      if (mounted) setState(() => _isManagingQr = false);
+    }
   }
 
   @override
@@ -133,6 +229,55 @@ class _DoorQrScreenState extends State<DoorQrScreen> {
       title: context.tr('QR kodu', 'QR code'),
       child: ListView(
         children: [
+          ElevCard(
+            color: const Color(0xFFF1F5FF),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  context.tr(
+                      'QR güvenliği', 'QR security', 'Безопасность QR-кода'),
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  context.tr(
+                      '$_activeQrCount etkin QR kaydı var. Kodun paylaşıldığını düşünüyorsanız yenileyin.',
+                      'There are $_activeQrCount active QR records. Rotate the code if you think it was shared.',
+                      'Активных QR-кодов: $_activeQrCount. Обновите код, если он мог попасть к посторонним.'),
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodyMedium
+                      ?.copyWith(color: AppColors.muted),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _isManagingQr ? null : _rotateQr,
+                        icon: const Icon(Icons.refresh_rounded),
+                        label: Text(context.tr('QR kodunu yenile',
+                            'Rotate QR code', 'Обновить QR-код')),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton.outlined(
+                      tooltip: context.tr('Tüm QR kodlarını iptal et',
+                          'Revoke all QR codes', 'Отозвать все QR-коды'),
+                      onPressed: _isManagingQr ? null : _revokeAllQr,
+                      icon: const Icon(Icons.link_off_rounded),
+                    ),
+                  ],
+                ),
+                if (_isManagingQr) ...[
+                  const SizedBox(height: 10),
+                  const LinearProgressIndicator(),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
           ElevCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -264,7 +409,7 @@ class _DoorQrScreenState extends State<DoorQrScreen> {
                           border: previewBorder,
                         ),
                         child: QrImageView(
-                            data: widget.qrUrl,
+                            data: _qrUrl,
                             version: QrVersions.auto,
                             size: sideText.isEmpty ? 250 : 210),
                       ),
@@ -376,9 +521,13 @@ extension on _QrTextPreset {
         _QrTextPreset.apartment =>
           context.tr('Zili çalmak için taratın', 'Scan to ring the bell'),
         _QrTextPreset.office => context.tr(
-            'Yetkiliye ulaşmak için taratın', 'Scan to reach the host'),
+            'Yetkiliye ulaşmak için taratın',
+            'Scan to contact the door manager',
+            'Отсканируйте, чтобы связаться с управляющим дверью'),
         _QrTextPreset.accommodation => context.tr(
-            'Ev sahibinize ulaşmak için taratın', 'Scan to reach your host'),
+            'Kapı yöneticisine ulaşmak için taratın',
+            'Scan to contact your door manager',
+            'Отсканируйте, чтобы связаться с управляющим дверью'),
         _QrTextPreset.vehicle =>
           context.tr('Bu araç için taratın', 'Scan for this vehicle'),
       };

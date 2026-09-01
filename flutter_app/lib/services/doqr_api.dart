@@ -7,6 +7,7 @@ import '../models/chat_message_item.dart';
 import '../models/courier_note_item.dart';
 import '../models/door_item.dart';
 import '../models/ring_item.dart';
+import 'user_error.dart';
 
 class RtcConfig {
   final List<Map<String, dynamic>> iceServers;
@@ -28,10 +29,20 @@ class DoqrApi {
   Never _throw(FunctionResponse response) {
     final data = response.data;
     if (data is Map && data['error'] != null) {
-      throw Exception(data['error'].toString());
+      throw DoqrApiException(
+        data['code']?.toString() ?? 'REQUEST_FAILED',
+        data['error'].toString(),
+        status: response.status,
+      );
     }
-    throw Exception(appText('İstek başarısız (${response.status})',
-        'Request failed (${response.status})'));
+    throw DoqrApiException(
+      'REQUEST_FAILED',
+      appText(
+          'İstek başarısız (${response.status})',
+          'Request failed (${response.status})',
+          'Запрос не выполнен (${response.status})'),
+      status: response.status,
+    );
   }
 
   Future<Map<String, dynamic>> verifyStorePurchase({
@@ -125,6 +136,12 @@ class DoqrApi {
     return DoorItem.fromJson(map);
   }
 
+  Future<void> deleteDoor(String doorId) async {
+    final response =
+        await client.functions.invoke('door-delete', body: {'door_id': doorId});
+    if (response.status != 200) _throw(response);
+  }
+
   Future<List<RingItem>> listRings() async {
     final rows = await client
         .from('rings')
@@ -196,10 +213,14 @@ class DoqrApi {
     );
   }
 
-  Future<Map<String, dynamic>> createQrToken({required String doorId}) async {
+  Future<Map<String, dynamic>> createQrToken({
+    required String doorId,
+    bool replaceExisting = false,
+  }) async {
     final response =
         await client.functions.invoke('door-qr-token-create', body: {
       'door_id': doorId,
+      'replace_existing': replaceExisting,
     });
     if (response.status != 201) _throw(response);
     return Map<String, dynamic>.from(response.data as Map);
@@ -211,13 +232,28 @@ class DoqrApi {
     if (response.status != 200) _throw(response);
   }
 
+  Future<void> revokeAllQrTokens({required String doorId}) async {
+    final response = await client.functions.invoke('door-qr-token-revoke',
+        body: {'door_id': doorId, 'revoke_all': true});
+    if (response.status != 200) _throw(response);
+  }
+
+  Future<Map<String, dynamic>> listQrTokens(String doorId) async {
+    final response = await client.functions.invoke(
+      'door-qr-token-list',
+      method: HttpMethod.get,
+      queryParameters: {'door_id': doorId},
+    );
+    if (response.status != 200) _throw(response);
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
   Future<Map<String, dynamic>> createDoorShareInvite({
     required String doorId,
     int expiresMinutes = 1440,
     String? pin,
   }) async {
-    final response =
-        await client.functions.invoke('door-share-create', body: {
+    final response = await client.functions.invoke('door-share-create', body: {
       'door_id': doorId,
       'expires_minutes': expiresMinutes,
       'max_uses': 1,
@@ -231,10 +267,47 @@ class DoqrApi {
     required String shareToken,
     String? pin,
   }) async {
-    final response =
-        await client.functions.invoke('door-share-accept', body: {
+    final response = await client.functions.invoke('door-share-accept', body: {
       'share_token': shareToken,
       'pin': pin,
+    });
+    if (response.status != 200) _throw(response);
+  }
+
+  Future<Map<String, dynamic>> getDoorAccess(String doorId) async {
+    final response = await client.functions.invoke(
+      'door-access-manage',
+      method: HttpMethod.get,
+      queryParameters: {'door_id': doorId},
+    );
+    if (response.status != 200) _throw(response);
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  Future<void> removeDoorMember({
+    required String doorId,
+    required String memberUserId,
+  }) async {
+    final response = await client.functions.invoke('door-access-manage', body: {
+      'action': 'remove_member',
+      'door_id': doorId,
+      'member_user_id': memberUserId,
+    });
+    if (response.status != 200) _throw(response);
+  }
+
+  Future<void> revokeDoorInvite(String tokenId) async {
+    final response = await client.functions.invoke('door-access-manage', body: {
+      'action': 'revoke_invite',
+      'token_id': tokenId,
+    });
+    if (response.status != 200) _throw(response);
+  }
+
+  Future<void> leaveSharedDoor(String doorId) async {
+    final response = await client.functions.invoke('door-access-manage', body: {
+      'action': 'leave',
+      'door_id': doorId,
     });
     if (response.status != 200) _throw(response);
   }

@@ -293,21 +293,15 @@ Deno.serve(async (req) => {
           Math.floor((Date.now() - new Date(ring.answered_at).getTime()) / 1000),
         ),
       );
-      const periodStart = new Date();
-      periodStart.setUTCDate(1);
-      periodStart.setUTCHours(0, 0, 0, 0);
-      await admin.from("usage_monthly").upsert({
-        user_id: ownerUserId,
-        period_start: periodStart.toISOString().slice(0, 10),
-      }, { onConflict: "user_id,period_start", ignoreDuplicates: true });
-      const field = ring.accepted_mode === "video" ? "video_seconds" : "audio_seconds";
-      const { data: usage } = await admin.from("usage_monthly")
-        .select("audio_seconds, video_seconds").eq("user_id", ownerUserId)
-        .eq("period_start", periodStart.toISOString().slice(0, 10)).single();
-      await admin.from("usage_monthly").update({
-        [field]: Number(usage?.[field] ?? 0) + seconds,
-        updated_at: now,
-      }).eq("user_id", ownerUserId).eq("period_start", periodStart.toISOString().slice(0, 10));
+      const { error: usageError } = await admin.rpc(
+        "increment_doorbell_media_usage",
+        {
+          _user_id: ownerUserId,
+          _mode: ring.accepted_mode,
+          _seconds: seconds,
+        },
+      );
+      if (usageError) throw new Error(usageError.message);
       await admin.from("ring_events").insert({
         ring_id: ringId,
         event_type: "media_ended",

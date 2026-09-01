@@ -5,6 +5,7 @@ import '../app_config.dart';
 import '../l10n/app_language.dart';
 import '../models/door_item.dart';
 import '../services/providers.dart';
+import '../services/user_error.dart';
 import '../services/door_qr_cache.dart';
 import '../ui/app_theme.dart';
 import '../widgets/app_shell.dart';
@@ -117,8 +118,10 @@ class _DoorsManageScreenState extends ConsumerState<DoorsManageScreen> {
             TextField(
                 controller: address,
                 decoration: InputDecoration(
-                    labelText: context.tr('Adres (yalnızca host görür)',
-                        'Address (visible to hosts only)'))),
+                    labelText: context.tr(
+                        'Adres (yalnızca kapıyı yönetenler görür)',
+                        'Address (visible only to door managers)',
+                        'Адрес (виден только управляющим дверью)'))),
           ],
         ),
         actions: [
@@ -142,7 +145,7 @@ class _DoorsManageScreenState extends ConsumerState<DoorsManageScreen> {
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(error.toString())));
+            .showSnackBar(SnackBar(content: Text(userErrorMessage(error))));
       }
     }
   }
@@ -162,8 +165,8 @@ class _DoorsManageScreenState extends ConsumerState<DoorsManageScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: Text(
-              context.tr('${door.label} ayarları', '${door.label} settings')),
+          title: Text(context.tr('${door.label} ayarları',
+              '${door.label} settings', 'Настройки: ${door.label}')),
           content: SizedBox(
             width: 420,
             child: SingleChildScrollView(
@@ -236,8 +239,8 @@ class _DoorsManageScreenState extends ConsumerState<DoorsManageScreen> {
                     min: 15,
                     max: 120,
                     divisions: 7,
-                    label: context.tr(
-                        '${timeout.round()} sn', '${timeout.round()} sec'),
+                    label: context.tr('${timeout.round()} sn',
+                        '${timeout.round()} sec', '${timeout.round()} сек.'),
                     onChanged: (value) => setDialogState(() => timeout = value),
                   ),
                 ],
@@ -275,31 +278,133 @@ class _DoorsManageScreenState extends ConsumerState<DoorsManageScreen> {
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(error.toString())));
+            .showSnackBar(SnackBar(content: Text(userErrorMessage(error))));
       }
     }
   }
 
   Future<void> _showQr(DoorItem door) async {
     try {
+      final api = ref.read(doqrApiProvider);
       var token = await DoorQrCache.read(door.id);
-      token ??= (await ref
-          .read(doqrApiProvider)
-          .createQrToken(doorId: door.id))['qr_token'] as String;
-      await DoorQrCache.save(door.id, token);
+      if (token == null) {
+        final issued = await api.createQrToken(doorId: door.id);
+        token = issued['qr_token'] as String;
+        await DoorQrCache.save(door.id, token,
+            tokenId: issued['token_id'] as String);
+      }
+      final records = await api.listQrTokens(door.id);
       if (!mounted) return;
-      final url = AppConfig.visitorUrlForToken(
-        token,
-      ).toString();
+      final url = AppConfig.visitorUrlForToken(token).toString();
       await Navigator.push(
         context,
         MaterialPageRoute(
-            builder: (_) => DoorQrScreen(doorLabel: door.label, qrUrl: url)),
+          builder: (_) => DoorQrScreen(
+            doorLabel: door.label,
+            qrUrl: url,
+            activeQrCount: (records['active_count'] as num?)?.toInt() ?? 1,
+            onRotate: () async {
+              final issued = await api.createQrToken(
+                  doorId: door.id, replaceExisting: true);
+              final replacement = issued['qr_token'] as String;
+              await DoorQrCache.save(door.id, replacement,
+                  tokenId: issued['token_id'] as String);
+              return AppConfig.visitorUrlForToken(replacement).toString();
+            },
+            onRevokeAll: () async {
+              await api.revokeAllQrTokens(doorId: door.id);
+              await DoorQrCache.remove(door.id);
+            },
+          ),
+        ),
       );
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(error.toString())));
+            .showSnackBar(SnackBar(content: Text(userErrorMessage(error))));
+      }
+    }
+  }
+
+  Future<void> _deleteDoor(DoorItem door) async {
+    final confirmation = TextEditingController();
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: const Icon(Icons.delete_forever_rounded, color: AppColors.danger),
+        title: Text(context.tr('Dijital zil silinsin mi?',
+            'Delete this doorbell?', 'Удалить этот звонок?')),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(context.tr(
+                'QR kodları, ziyaret geçmişi, mesajlar, kurye notları ve paylaşımlar kalıcı olarak silinir. Onaylamak için zil adını yazın: ${door.label}',
+                'QR codes, visit history, messages, courier notes, and sharing records will be permanently deleted. Type the doorbell name to confirm: ${door.label}',
+                'QR-коды, история визитов, сообщения, заметки курьеров и совместный доступ будут удалены навсегда. Для подтверждения введите название: ${door.label}')),
+            const SizedBox(height: 14),
+            TextField(
+              controller: confirmation,
+              autofocus: true,
+              decoration: InputDecoration(labelText: door.label),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(context.tr('Vazgeç', 'Cancel', 'Отмена'))),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
+            onPressed: () =>
+                Navigator.pop(context, confirmation.text.trim() == door.label),
+            child: Text(context.tr(
+                'Kalıcı olarak sil', 'Delete permanently', 'Удалить навсегда')),
+          ),
+        ],
+      ),
+    );
+    confirmation.dispose();
+    if (accepted != true) return;
+    try {
+      await ref.read(doqrApiProvider).deleteDoor(door.id);
+      await DoorQrCache.remove(door.id);
+      _reload();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(userErrorMessage(error))));
+      }
+    }
+  }
+
+  Future<void> _leaveDoor(DoorItem door) async {
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(context.tr('Paylaşılan kapıdan ayrıl?',
+            'Leave this shared door?', 'Покинуть эту общую дверь?')),
+        content: Text(context.tr(
+            'Artık ${door.label} bildirimlerini ve ziyaret mesajlarını alamazsınız.',
+            'You will no longer receive notifications or visitor messages for ${door.label}.',
+            'Вы больше не будете получать уведомления и сообщения посетителей для ${door.label}.')),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(context.tr('Vazgeç', 'Cancel', 'Отмена'))),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(context.tr('Ayrıl', 'Leave', 'Покинуть'))),
+        ],
+      ),
+    );
+    if (accepted != true) return;
+    try {
+      await ref.read(doqrApiProvider).leaveSharedDoor(door.id);
+      _reload();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(userErrorMessage(error))));
       }
     }
   }
@@ -371,7 +476,7 @@ class _DoorsManageScreenState extends ConsumerState<DoorsManageScreen> {
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(error.toString())));
+            .showSnackBar(SnackBar(content: Text(userErrorMessage(error))));
       }
     }
   }
@@ -386,9 +491,12 @@ class _DoorsManageScreenState extends ConsumerState<DoorsManageScreen> {
               return const Center(child: CircularProgressIndicator());
             }
             if (snapshot.hasError) {
-              return Center(child: Text(snapshot.error.toString()));
+              return Center(child: Text(userErrorMessage(snapshot.error)));
             }
             final result = snapshot.requireData;
+            final ownedCount =
+                result.doors.where((door) => door.isOwner).length;
+            final sharedCount = result.doors.length - ownedCount;
             return Column(
               children: [
                 Row(
@@ -396,14 +504,14 @@ class _DoorsManageScreenState extends ConsumerState<DoorsManageScreen> {
                     Expanded(
                         child: Text(
                             context.tr(
-                                '${result.doors.length}/${result.accountPlan.maxDoors} zil',
-                                '${result.doors.length}/${result.accountPlan.maxDoors} doorbells'),
+                                '$ownedCount/${result.accountPlan.maxDoors} zil${sharedCount > 0 ? ' • $sharedCount paylaşılan' : ''}',
+                                '$ownedCount/${result.accountPlan.maxDoors} doorbells${sharedCount > 0 ? ' • $sharedCount shared' : ''}',
+                                '$ownedCount/${result.accountPlan.maxDoors} звонков${sharedCount > 0 ? ' • общих: $sharedCount' : ''}'),
                             style: Theme.of(context).textTheme.titleMedium)),
                     FilledButton.icon(
-                      onPressed: () =>
-                          result.doors.length < result.accountPlan.maxDoors
-                              ? _create(result.accountPlan)
-                              : _showDoorLimit(result.accountPlan),
+                      onPressed: () => ownedCount < result.accountPlan.maxDoors
+                          ? _create(result.accountPlan)
+                          : _showDoorLimit(result.accountPlan),
                       icon: const Icon(Icons.add_rounded),
                       label: Text(context.tr('Ekle', 'Add')),
                     ),
@@ -431,7 +539,7 @@ class _DoorsManageScreenState extends ConsumerState<DoorsManageScreen> {
                             final door = result.doors[index];
                             final modes = [
                               if (door.settings.textEnabled)
-                                context.tr('Yazı', 'Text'),
+                                context.tr('Yazılı', 'Text', 'Текст'),
                               if (door.settings.audioEnabled)
                                 context.tr('Ses', 'Audio'),
                               if (door.settings.videoEnabled) 'Video',
@@ -455,7 +563,14 @@ class _DoorsManageScreenState extends ConsumerState<DoorsManageScreen> {
                                             onPressed: () => _edit(door),
                                             icon:
                                                 const Icon(Icons.tune_rounded))
-                                        : null,
+                                        : IconButton(
+                                            tooltip: context.tr(
+                                                'Paylaşılan kapıdan ayrıl',
+                                                'Leave shared door',
+                                                'Покинуть общую дверь'),
+                                            onPressed: () => _leaveDoor(door),
+                                            icon: const Icon(
+                                                Icons.logout_rounded)),
                                   ),
                                   if (door.isOwner)
                                     Row(
@@ -499,8 +614,9 @@ class _DoorsManageScreenState extends ConsumerState<DoorsManageScreen> {
                                         icon: const Icon(
                                             Icons.people_alt_rounded),
                                         label: Text(context.tr(
-                                            'Host ile paylaş',
-                                            'Share with host')),
+                                            'Kapı erişimini paylaş',
+                                            'Share door access',
+                                            'Поделиться доступом')),
                                       ),
                                     ),
                                     SizedBox(
@@ -525,6 +641,20 @@ class _DoorsManageScreenState extends ConsumerState<DoorsManageScreen> {
                                             door.plan.has('visitor_blocking')
                                                 ? 'Blocked devices and networks'
                                                 : 'Blocking (Pro)')),
+                                      ),
+                                    ),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: TextButton.icon(
+                                        style: TextButton.styleFrom(
+                                            foregroundColor: AppColors.danger),
+                                        onPressed: () => _deleteDoor(door),
+                                        icon: const Icon(
+                                            Icons.delete_outline_rounded),
+                                        label: Text(context.tr(
+                                            'Dijital zili kalıcı olarak sil',
+                                            'Delete doorbell permanently',
+                                            'Удалить звонок навсегда')),
                                       ),
                                     ),
                                   ],

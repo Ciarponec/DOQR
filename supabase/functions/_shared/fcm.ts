@@ -179,19 +179,18 @@ export async function notifyDoorbell(
   if (input.recipientIds.length === 0) return { sent: 0, failed: 0 };
   const { data: rows, error } = await admin
     .from("user_push_tokens")
-    .select("id, fcm_token, platform")
+    .select("id, fcm_token, platform, locale")
     .in("user_id", input.recipientIds);
   if (error) throw new Error(error.message);
 
   const tokens = rows ?? [];
-  const title = `${input.doorLabel}: Zil çalıyor`;
-  const body = input.courierLabel
-    ? `${input.courierLabel} kuryesi zili çalıyor`
-    : `${input.visitorAlias ?? "Bir ziyaretçi"} zili çalıyor`;
   const results = await Promise.allSettled(tokens.map(async (row) => {
+    const copy = notificationCopy(row.locale, input);
     const result = await sendOne(
       row.fcm_token,
-      row.platform === "android" ? null : { title, body },
+      row.platform === "android"
+        ? null
+        : { title: copy.title, body: copy.body },
       {
       type: "doorbell_ring",
       ring_id: input.ringId,
@@ -199,8 +198,9 @@ export async function notifyDoorbell(
       requested_mode: input.requestedMode,
       ring_timeout_seconds: String(input.ringTimeoutSeconds),
       courier_note_available: input.courierNoteAvailable ? "true" : "false",
-      notification_title: title,
-      notification_body: body,
+      notification_title: copy.title,
+      notification_body: copy.body,
+      delivery_action_label: copy.deliveryAction,
       click_action: "FLUTTER_NOTIFICATION_CLICK",
       },
     );
@@ -228,19 +228,21 @@ export async function notifyDoorbell(
       failed: results.filter((result) => result.status === "rejected").length,
     };
     if (elapsed < timeoutMs && iosTokens.length > 0) {
-      await Promise.allSettled(iosTokens.map((row) =>
-        sendOne(row.fcm_token, { title, body }, {
+      await Promise.allSettled(iosTokens.map((row) => {
+        const copy = notificationCopy(row.locale, input);
+        return sendOne(row.fcm_token, { title: copy.title, body: copy.body }, {
           type: "doorbell_ring",
           ring_id: input.ringId,
           door_id: input.doorId,
           requested_mode: input.requestedMode,
           ring_timeout_seconds: String(input.ringTimeoutSeconds),
           courier_note_available: input.courierNoteAvailable ? "true" : "false",
-          notification_title: title,
-          notification_body: body,
+          notification_title: copy.title,
+          notification_body: copy.body,
+          delivery_action_label: copy.deliveryAction,
           click_action: "FLUTTER_NOTIFICATION_CLICK",
-        })
-      ));
+        });
+      }));
     }
   }
 
@@ -267,6 +269,42 @@ export async function notifyDoorbell(
   return {
     sent: results.filter((result) => result.status === "fulfilled").length,
     failed: results.filter((result) => result.status === "rejected").length,
+  };
+}
+
+function notificationCopy(
+  locale: unknown,
+  input: {
+    doorLabel: string;
+    visitorAlias: string | null;
+    courierLabel?: string | null;
+  },
+) {
+  const language = String(locale ?? "tr").toLowerCase().split(/[-_]/)[0];
+  if (language === "en") {
+    return {
+      title: `${input.doorLabel}: Doorbell ringing`,
+      body: input.courierLabel
+        ? `${input.courierLabel} courier is at the door`
+        : `${input.visitorAlias ?? "A visitor"} is at the door`,
+      deliveryAction: "Send delivery code",
+    };
+  }
+  if (language === "ru") {
+    return {
+      title: `${input.doorLabel}: звонок в дверь`,
+      body: input.courierLabel
+        ? `Курьер ${input.courierLabel} у двери`
+        : `${input.visitorAlias ?? "Посетитель"} у двери`,
+      deliveryAction: "Отправить код доставки",
+    };
+  }
+  return {
+    title: `${input.doorLabel}: Zil çalıyor`,
+    body: input.courierLabel
+      ? `${input.courierLabel} kuryesi kapıda`
+      : `${input.visitorAlias ?? "Bir ziyaretçi"} kapıda`,
+    deliveryAction: "Teslimat kodunu gönder",
   };
 }
 

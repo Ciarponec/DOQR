@@ -10,6 +10,7 @@ import '../models/door_item.dart';
 import '../models/ring_item.dart';
 import '../services/media_session.dart';
 import '../services/providers.dart';
+import '../services/user_error.dart';
 import '../ui/app_theme.dart';
 import '../widgets/app_shell.dart';
 import '../widgets/closed_session_notice.dart';
@@ -111,7 +112,7 @@ class _RingSessionScreenState extends ConsumerState<RingSessionScreen> {
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(error.toString())));
+            .showSnackBar(SnackBar(content: Text(userErrorMessage(error))));
       }
     } finally {
       if (mounted) setState(() => busy = false);
@@ -131,7 +132,7 @@ class _RingSessionScreenState extends ConsumerState<RingSessionScreen> {
       input.text = text;
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(error.toString())));
+            .showSnackBar(SnackBar(content: Text(userErrorMessage(error))));
       }
     }
   }
@@ -208,7 +209,7 @@ class _RingSessionScreenState extends ConsumerState<RingSessionScreen> {
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(error.toString())));
+            .showSnackBar(SnackBar(content: Text(userErrorMessage(error))));
       }
     } finally {
       if (mounted) setState(() => busy = false);
@@ -271,7 +272,7 @@ class _RingSessionScreenState extends ConsumerState<RingSessionScreen> {
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(error.toString())));
+            .showSnackBar(SnackBar(content: Text(userErrorMessage(error))));
       }
     }
   }
@@ -330,6 +331,12 @@ class _RingSessionScreenState extends ConsumerState<RingSessionScreen> {
 
   @override
   void dispose() {
+    if (ring?.status == 'accepted') {
+      unawaited(ref
+          .read(doqrApiProvider)
+          .ringAction(ringId: widget.ringId, action: 'end')
+          .catchError((_) => ring!));
+    }
     input.dispose();
     ringSubscription?.cancel();
     media?.removeListener(_mediaChanged);
@@ -342,7 +349,7 @@ class _RingSessionScreenState extends ConsumerState<RingSessionScreen> {
     if (loadError != null) {
       return AppShell(
           title: context.tr('Ziyaret', 'Visit'),
-          child: Center(child: Text(loadError.toString())));
+          child: Center(child: Text(userErrorMessage(loadError))));
     }
     final item = ring;
     if (item == null) {
@@ -390,7 +397,8 @@ class _RingSessionScreenState extends ConsumerState<RingSessionScreen> {
                       child: Text(
                           context.tr(
                               '${item.courierCode ?? 'Kurye'} seçimi ziyaretçinin kendi beyanıdır.',
-                              'The ${item.courierCode ?? 'Courier'} selection is provided by the visitor.'),
+                              'The ${item.courierCode ?? 'Courier'} selection is provided by the visitor.',
+                              'Службу «${item.courierCode ?? 'Курьер'}» указал сам посетитель.'),
                           style: Theme.of(context).textTheme.bodyMedium)),
                   if (item.courierNoteId != null)
                     TextButton(
@@ -434,7 +442,8 @@ class _RingSessionScreenState extends ConsumerState<RingSessionScreen> {
                   Text(
                     context.tr(
                         'Ziyaretçi ${_modeLabel(context, item.activeMode).toLowerCase()} isteğini kabul ettiğinde görüşme başlar.',
-                        'The call starts when the visitor accepts the ${_modeLabel(context, item.activeMode).toLowerCase()} request.'),
+                        'The call starts when the visitor accepts the ${_modeLabel(context, item.activeMode).toLowerCase()} request.',
+                        'Звонок начнётся, когда посетитель примет запрос «${_modeLabel(context, item.activeMode).toLowerCase()}».'),
                     style: Theme.of(context)
                         .textTheme
                         .bodyMedium
@@ -682,7 +691,8 @@ class _MediaPanel extends StatelessWidget {
     final seconds = (value ?? 60).clamp(0, 60);
     return context.tr(
         'En fazla 1 dk · 00:${seconds.toString().padLeft(2, '0')}',
-        'Up to 1 min · 00:${seconds.toString().padLeft(2, '0')}');
+        'Up to 1 min · 00:${seconds.toString().padLeft(2, '0')}',
+        'До 1 мин · 00:${seconds.toString().padLeft(2, '0')}');
   }
 }
 

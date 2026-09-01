@@ -15,7 +15,7 @@ void main() {
 
     expect(
       mediaSessionErrorMessage(exception),
-      'Sesli ve görüntülü görüşme geçici olarak kullanılamıyor',
+      'Sesli ve görüntülü görüşme geçici olarak kullanılamıyor.',
     );
   });
 

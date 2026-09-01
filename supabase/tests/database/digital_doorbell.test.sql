@@ -1,7 +1,20 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(20);
+select plan(27);
+
+select ok(
+  has_table_privilege('service_role', 'public.users', 'INSERT'),
+  'Service role can create application user profiles'
+);
+select ok(
+  has_table_privilege('service_role', 'public.doors', 'DELETE'),
+  'Service role can perform owner-authorized door deletion'
+);
+select ok(
+  has_table_privilege('service_role', 'public.rings', 'SELECT'),
+  'Service role can evaluate active visitor sessions'
+);
 
 select is(
   (select (features->>'push_notifications')::boolean from public.plan_definitions where id = 'free'),
@@ -48,6 +61,22 @@ select ok(
   ),
   'Anonymous API role cannot execute the private ring helper'
 );
+select ok(
+  has_function_privilege(
+    'service_role',
+    'public.increment_doorbell_media_usage(uuid, text, integer)',
+    'EXECUTE'
+  ),
+  'Service role can atomically record media usage'
+);
+select ok(
+  not has_function_privilege(
+    'authenticated',
+    'public.increment_doorbell_media_usage(uuid, text, integer)',
+    'EXECUTE'
+  ),
+  'Authenticated clients cannot alter media usage counters'
+);
 
 insert into auth.users (id, email) values
   ('11111111-1111-1111-1111-111111111111', 'pro-owner@example.test'),
@@ -64,6 +93,20 @@ insert into public.users (id) values
 insert into public.doors (id, owner_user_id, label) values
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '11111111-1111-1111-1111-111111111111', 'Pro door'),
   ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', '22222222-2222-2222-2222-222222222222', 'Free door');
+
+select lives_ok(
+  $$select public.increment_doorbell_media_usage(
+    '11111111-1111-1111-1111-111111111111', 'audio', 12
+  )$$,
+  'Media usage can be inserted atomically'
+);
+select is(
+  (public.increment_doorbell_media_usage(
+    '11111111-1111-1111-1111-111111111111', 'audio', 8
+  )->>'audio_seconds')::integer,
+  20,
+  'Concurrent-safe upsert increments existing usage'
+);
 
 select throws_ok(
   $$insert into public.door_shared_users (door_id, user_id, granted_by) values

@@ -7,6 +7,7 @@ import '../models/door_item.dart';
 import '../models/ring_item.dart';
 import '../services/notification_service.dart';
 import '../services/providers.dart';
+import '../services/user_error.dart';
 import '../widgets/app_shell.dart';
 import 'settings_screen.dart';
 
@@ -192,7 +193,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             }
             if (data == null && snapshot.hasError) {
               return _ErrorState(
-                  message: snapshot.error.toString(), retry: _refresh);
+                  message: userErrorMessage(snapshot.error), retry: _refresh);
             }
             final homeData = data!;
             return Stack(
@@ -318,8 +319,10 @@ class _PlanHeader extends StatelessWidget {
                       plan.isTrial
                           ? context.tr('Mevcut planın: Pro Deneme',
                               'Current plan: Pro Trial')
-                          : context.tr('Mevcut planın: ${plan.displayName}',
-                              'Current plan: ${plan.displayName}'),
+                          : context.tr(
+                              'Mevcut planın: ${plan.displayName}',
+                              'Current plan: ${plan.displayName}',
+                              'Текущий тариф: ${plan.displayName}'),
                       style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 3),
                   Text(
@@ -409,14 +412,16 @@ class _RingCard extends StatelessWidget {
     if (difference.inMinutes < 1) return context.tr('şimdi', 'now');
     if (difference.inHours < 1) {
       return context.tr(
-          '${difference.inMinutes} dk önce', '${difference.inMinutes} min ago');
+          '${difference.inMinutes} dk önce',
+          '${difference.inMinutes} min ago',
+          '${difference.inMinutes} мин. назад');
     }
     if (difference.inDays < 1) {
-      return context.tr(
-          '${difference.inHours} sa önce', '${difference.inHours} hr ago');
+      return context.tr('${difference.inHours} sa önce',
+          '${difference.inHours} hr ago', '${difference.inHours} ч. назад');
     }
-    return context.tr(
-        '${difference.inDays} gün önce', '${difference.inDays} days ago');
+    return context.tr('${difference.inDays} gün önce',
+        '${difference.inDays} days ago', '${difference.inDays} дн. назад');
   }
 }
 

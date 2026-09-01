@@ -19,7 +19,12 @@ jobs:
           flutter-version: '3.44.4'
       - run: flutter pub get
       - run: flutter analyze
-      - run: flutter test
+      - run: flutter test --coverage
+      - name: Enforce minimum line coverage
+        run: |
+          awk -F: '/^LF:/{lf+=$2} /^LH:/{lh+=$2} END { pct=(lf ? 100*lh/lf : 0); printf "Line coverage: %.2f%%\n", pct; if (pct < 30) exit 1 }' coverage/lcov.info
+      - run: flutter build web --release
+      - run: flutter build apk --debug
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
@@ -28,4 +33,31 @@ jobs:
         run: deno check supabase/functions/*/index.ts
       - name: Check visitor web JavaScript
         working-directory: .
-        run: node --check visitor_web/app.js
+        run: |
+          node --check visitor_web/app.js
+          node --check visitor_web/i18n.js
+      - name: Verify published visitor files are in sync
+        working-directory: .
+        run: |
+          for file in app.js index.html styles.css i18n.js chat.html; do
+            cmp "visitor_web/$file" "docs/$file"
+          done
+          cmp visitor_web/README.md docs/visitor_web_README.md
+
+  database:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Start local Supabase
+        run: supabase start
+      - name: Reset and test database migrations
+        run: |
+          supabase db reset --local
+          supabase test db --local
+          supabase db lint --local --level warning
+      - name: Stop local Supabase
+        if: always()
+        run: supabase stop

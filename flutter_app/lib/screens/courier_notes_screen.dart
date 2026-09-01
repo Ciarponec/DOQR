@@ -5,6 +5,7 @@ import '../l10n/app_language.dart';
 import '../models/courier_note_item.dart';
 import '../models/door_item.dart';
 import '../services/providers.dart';
+import '../services/user_error.dart';
 import '../widgets/app_shell.dart';
 
 class CourierNotesScreen extends ConsumerStatefulWidget {
@@ -56,11 +57,12 @@ class _CourierNotesScreenState extends ConsumerState<CourierNotesScreen> {
                   TextField(
                       controller: courier,
                       decoration: InputDecoration(
-                          labelText: context.tr(
-                              'Kurye şirketi', 'Courier company'),
+                          labelText:
+                              context.tr('Kurye şirketi', 'Courier company'),
                           helperText: context.tr(
-                              'Ziyaretçi aynı şirketi seçtiğinde bu not hosta önerilir.',
-                              'When the visitor selects this company, this note is offered to the host.'))),
+                              'Ziyaretçi aynı şirketi seçtiğinde bu not kapı yöneticisine önerilir.',
+                              'When the visitor selects this company, this note is offered to the door manager.',
+                              'Когда посетитель выбирает эту компанию, заметка предлагается управляющему дверью.'))),
                   const SizedBox(height: 10),
                   TextField(
                       controller: message,
@@ -68,7 +70,8 @@ class _CourierNotesScreenState extends ConsumerState<CourierNotesScreen> {
                       minLines: 2,
                       maxLines: 4,
                       decoration: InputDecoration(
-                          labelText: context.tr('Teslimat notu', 'Delivery note'))),
+                          labelText:
+                              context.tr('Teslimat notu', 'Delivery note'))),
                   const SizedBox(height: 10),
                   TextField(
                       controller: delivery,
@@ -109,7 +112,8 @@ class _CourierNotesScreenState extends ConsumerState<CourierNotesScreen> {
             id: note?.id,
             courierCode: _matchingCode(courierLabel),
             courierLabel: courierLabel,
-            title: '$courierLabel ${context.tr('teslimat notu', 'delivery note')}',
+            title:
+                '$courierLabel ${context.tr('teslimat notu', 'delivery note')}',
             message: noteText,
             deliveryCode:
                 delivery.text.trim().isEmpty ? null : delivery.text.trim(),
@@ -119,7 +123,7 @@ class _CourierNotesScreenState extends ConsumerState<CourierNotesScreen> {
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(error.toString())));
+            .showSnackBar(SnackBar(content: Text(userErrorMessage(error))));
       }
     }
   }
@@ -148,7 +152,7 @@ class _CourierNotesScreenState extends ConsumerState<CourierNotesScreen> {
               return const Center(child: CircularProgressIndicator());
             }
             if (snapshot.hasError) {
-              return Center(child: Text(snapshot.error.toString()));
+              return Center(child: Text(userErrorMessage(snapshot.error)));
             }
             final notes = snapshot.data ?? [];
             return Column(
@@ -156,8 +160,9 @@ class _CourierNotesScreenState extends ConsumerState<CourierNotesScreen> {
                 ElevCard(
                   child: Text(
                       context.tr(
-                          'Ziyaretçi bu kurye şirketini seçerse not otomatik mesaj olarak gider. Teslimat kodu varsa host ayrıca paylaşır.',
-                          'When a visitor selects this courier company, the host gets a “Share note” option. The note and delivery code are sent only after the host approves.'),
+                          'Ziyaretçi bu kurye şirketini seçerse kapı yöneticisi “Notu paylaş” seçeneğini görür. Not ve teslimat kodu yalnızca yönetici onayından sonra gönderilir.',
+                          'When a visitor selects this courier company, the door manager gets a “Share note” option. The note and delivery code are sent only after the manager approves.',
+                          'Если посетитель выбирает эту службу доставки, управляющий дверью видит действие «Поделиться заметкой». Заметка и код отправляются только после его подтверждения.'),
                       style: Theme.of(context).textTheme.bodyMedium),
                 ),
                 const SizedBox(height: 12),
@@ -189,7 +194,7 @@ class _CourierNotesScreenState extends ConsumerState<CourierNotesScreen> {
                                     style: const TextStyle(
                                         fontWeight: FontWeight.w700)),
                                 subtitle: Text(
-                                    '${note.message}${note.deliveryCode == null ? '' : context.tr('\nKod: ${note.deliveryCode}', '\nCode: ${note.deliveryCode}')}'),
+                                    '${note.message}${note.deliveryCode == null ? '' : context.tr('\nKod: ${note.deliveryCode}', '\nCode: ${note.deliveryCode}', '\nКод: ${note.deliveryCode}')}'),
                                 trailing: PopupMenuButton<String>(
                                   onSelected: (action) async {
                                     if (action == 'edit') return _edit(note);

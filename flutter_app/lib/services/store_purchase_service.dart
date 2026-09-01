@@ -7,6 +7,7 @@ import 'package:flutter/widgets.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../l10n/app_language.dart';
 import 'doqr_api.dart';
 
 class StorePurchaseService extends ChangeNotifier {
@@ -38,8 +39,12 @@ class StorePurchaseService extends ChangeNotifier {
     _locale = locale;
   }
 
-  String _message(String turkish, String english) =>
-      _locale.languageCode == 'en' ? english : turkish;
+  String _message(String turkish, String english, [String? russian]) =>
+      switch (_locale.languageCode) {
+        'en' => english,
+        'ru' => russian ?? russianText(english),
+        _ => turkish,
+      };
 
   bool takeEntitlementActivated() {
     if (!_entitlementActivated) return false;
@@ -107,8 +112,10 @@ class StorePurchaseService extends ChangeNotifier {
     _entitlementActivated = false;
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null || user.isAnonymous) {
-      _error = _message('Satın almak için host hesabıyla giriş yapın.',
-          'Sign in with a host account to make a purchase.');
+      _error = _message(
+          'Satın almak için kapı yöneticisi hesabıyla giriş yapın.',
+          'Sign in with a door manager account to make a purchase.',
+          'Войдите в учётную запись управляющего дверью, чтобы совершить покупку.');
       notifyListeners();
       return;
     }
@@ -140,8 +147,10 @@ class StorePurchaseService extends ChangeNotifier {
   Future<void> restorePurchases() async {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null || user.isAnonymous) {
-      _error = _message('Geri yüklemek için host hesabıyla giriş yapın.',
-          'Sign in with a host account to restore purchases.');
+      _error = _message(
+          'Geri yüklemek için kapı yöneticisi hesabıyla giriş yapın.',
+          'Sign in with a door manager account to restore purchases.',
+          'Войдите в учётную запись управляющего дверью, чтобы восстановить покупки.');
       notifyListeners();
       return;
     }

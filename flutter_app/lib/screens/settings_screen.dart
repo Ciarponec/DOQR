@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../app_config.dart';
 import '../l10n/app_language.dart';
 import '../models/door_item.dart';
 import '../widgets/app_shell.dart';
@@ -49,6 +50,13 @@ class SettingsScreen extends StatelessWidget {
                     current == 'en' ? const Icon(Icons.check_rounded) : null,
                 onTap: () => Navigator.pop(sheetContext, 'en'),
               ),
+              ListTile(
+                leading: const Text('🇷🇺', style: TextStyle(fontSize: 24)),
+                title: const Text('Русский'),
+                trailing:
+                    current == 'ru' ? const Icon(Icons.check_rounded) : null,
+                onTap: () => Navigator.pop(sheetContext, 'ru'),
+              ),
             ],
           ),
         ),
@@ -91,7 +99,12 @@ class SettingsScreen extends StatelessWidget {
             ListTile(
               leading: const Icon(Icons.language_rounded),
               title: Text(context.tr('Dil', 'Language')),
-              subtitle: Text(context.isEnglish ? 'English' : 'Türkçe'),
+              subtitle:
+                  Text(switch (Localizations.localeOf(context).languageCode) {
+                'en' => 'English',
+                'ru' => 'Русский',
+                _ => 'Türkçe',
+              }),
               trailing: const Icon(Icons.chevron_right_rounded),
               onTap: () => _chooseLanguage(context),
             ),
@@ -101,9 +114,8 @@ class SettingsScreen extends StatelessWidget {
               title: Text(context.tr('Gizlilik bildirimi', 'Privacy notice')),
               trailing: const Icon(Icons.open_in_new_rounded, size: 18),
               onTap: () => launchUrl(
-                Uri.parse(context.isEnglish
-                    ? 'https://ciarponec.github.io/DOQR/privacy-en.html'
-                    : 'https://ciarponec.github.io/DOQR/privacy.html'),
+                AppConfig.legalUrl(
+                    'privacy', Localizations.localeOf(context).languageCode),
                 mode: LaunchMode.externalApplication,
               ),
             ),

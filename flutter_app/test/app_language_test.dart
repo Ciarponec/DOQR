@@ -23,4 +23,18 @@ void main() {
 
     await second.setLocale(const Locale('tr'));
   });
+
+  test('Rusça cihaz dili ilk açılışta seçilir ve saklanır', () async {
+    SharedPreferences.setMockInitialValues({});
+    final initial = await AppLanguageController.resolveInitialLocale(
+        deviceLocale: const Locale('ru', 'RU'));
+    expect(initial.languageCode, 'ru');
+
+    final controller = AppLanguageController(initialLocale: initial);
+    addTearDown(controller.dispose);
+    await controller.setLocale(const Locale('en'));
+    final restored = await AppLanguageController.resolveInitialLocale(
+        deviceLocale: const Locale('ru', 'RU'));
+    expect(restored.languageCode, 'en');
+  });
 }

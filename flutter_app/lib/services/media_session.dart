@@ -6,12 +6,17 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../l10n/app_language.dart';
 import 'doqr_api.dart';
+import 'user_error.dart';
 
 String mediaSessionErrorMessage(Object exception) {
   if (exception is FunctionException) {
     final details = exception.details;
     if (details is Map && details['error'] is String) {
-      return details['error'] as String;
+      return userErrorMessage(DoqrApiException(
+        details['code']?.toString() ?? 'CALL_FAILED',
+        details['error'] as String,
+        status: exception.status,
+      ));
     }
     if (exception.status >= 500 || exception.status == 0) {
       return appText(
@@ -96,7 +101,9 @@ class MediaSessionController extends ChangeNotifier {
         _notify();
       };
       _peer!.onIceCandidate = (candidate) {
-        if (_closed || candidate.candidate == null || candidate.candidate!.isEmpty) {
+        if (_closed ||
+            candidate.candidate == null ||
+            candidate.candidate!.isEmpty) {
           return;
         }
         unawaited(_sendLocalCandidate(candidate));
@@ -117,8 +124,7 @@ class MediaSessionController extends ChangeNotifier {
           .stream(primaryKey: ['id'])
           .eq('ring_id', ringId)
           .listen(_onIceRows, onError: (Object error) {
-            _error = appText(
-                'Görüşme bağlantısı için ağ adayları alınamadı.',
+            _error = appText('Görüşme bağlantısı için ağ adayları alınamadı.',
                 'Network candidates for the call could not be received.');
             _notify();
           });

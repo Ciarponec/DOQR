@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../l10n/app_language.dart';
 import '../models/door_item.dart';
 import '../services/providers.dart';
+import '../services/user_error.dart';
 import '../ui/app_theme.dart';
 import '../widgets/app_shell.dart';
 
@@ -55,7 +56,7 @@ class _DoorBlocksScreenState extends ConsumerState<DoorBlocksScreen> {
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(error.toString())));
+            .showSnackBar(SnackBar(content: Text(userErrorMessage(error))));
       }
     }
   }
@@ -70,7 +71,7 @@ class _DoorBlocksScreenState extends ConsumerState<DoorBlocksScreen> {
               return const Center(child: CircularProgressIndicator());
             }
             if (snapshot.hasError) {
-              return Center(child: Text(snapshot.error.toString()));
+              return Center(child: Text(userErrorMessage(snapshot.error)));
             }
             final blocks = snapshot.data ?? const [];
             if (blocks.isEmpty) {
@@ -104,11 +105,14 @@ class _DoorBlocksScreenState extends ConsumerState<DoorBlocksScreen> {
                         style: const TextStyle(fontWeight: FontWeight.w700)),
                     subtitle: Text(
                       expires == null
-                          ? context.tr('Kalıcı • ${block['reason'] ?? ''}',
-                              'Permanent • ${block['reason'] ?? ''}')
+                          ? context.tr(
+                              'Kalıcı • ${block['reason'] ?? ''}',
+                              'Permanent • ${block['reason'] ?? ''}',
+                              'Постоянно • ${block['reason'] ?? ''}')
                           : context.tr(
                               '${expires.toLocal()} tarihine kadar • ${block['reason'] ?? ''}',
-                              'Until ${expires.toLocal()} • ${block['reason'] ?? ''}'),
+                              'Until ${expires.toLocal()} • ${block['reason'] ?? ''}',
+                              'До ${expires.toLocal()} • ${block['reason'] ?? ''}'),
                       style: const TextStyle(color: AppColors.muted),
                     ),
                     trailing: IconButton(

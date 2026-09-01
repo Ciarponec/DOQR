@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../app_config.dart';
 import '../l10n/app_language.dart';
 import '../models/door_item.dart';
 import '../models/plan_catalog.dart';
@@ -19,10 +20,12 @@ class PlansScreen extends StatefulWidget {
 }
 
 class _PlansScreenState extends State<PlansScreen> {
-  static final _termsUrl = Uri.parse(
+  static final _appleTermsUrl = Uri.parse(
       'https://www.apple.com/legal/internet-services/itunes/dev/stdeula/');
-  static final _manageSubscriptionsUrl =
+  static final _appleSubscriptionsUrl =
       Uri.parse('https://apps.apple.com/account/subscriptions');
+  static final _googlePlaySubscriptionsUrl = Uri.parse(
+      'https://play.google.com/store/account/subscriptions?package=com.doqr.app');
 
   final _store = StorePurchaseService.instance;
   bool _handlingSuccess = false;
@@ -86,10 +89,12 @@ class _PlansScreenState extends State<PlansScreen> {
                     : widget.currentPlan.isTrial
                         ? context.tr(
                             'Pro aboneliğini başlat • ${_store.displayPrice} / yıl',
-                            'Start Pro subscription • ${_store.displayPrice} / year')
+                            'Start Pro subscription • ${_store.displayPrice} / year',
+                            'Оформить Pro • ${_store.displayPrice} в год')
                         : context.tr(
                             "Pro'yu Satın Al • ${_store.displayPrice} / yıl",
-                            'Buy Pro • ${_store.displayPrice} / year')),
+                            'Buy Pro • ${_store.displayPrice} / year',
+                            'Купить Pro • ${_store.displayPrice} в год')),
           ),
           if (_store.loading) ...[
             const SizedBox(height: 10),
@@ -123,9 +128,8 @@ class _PlansScreenState extends State<PlansScreen> {
             children: [
               TextButton(
                 onPressed: () => launchUrl(
-                  Uri.parse(context.isEnglish
-                      ? 'https://ciarponec.github.io/DOQR/privacy-en.html'
-                      : 'https://ciarponec.github.io/DOQR/privacy.html'),
+                  AppConfig.legalUrl(
+                      'privacy', Localizations.localeOf(context).languageCode),
                   mode: LaunchMode.externalApplication,
                 ),
                 child:
@@ -133,15 +137,22 @@ class _PlansScreenState extends State<PlansScreen> {
               ),
               TextButton(
                 onPressed: () => launchUrl(
-                  _termsUrl,
+                  defaultTargetPlatform == TargetPlatform.iOS
+                      ? _appleTermsUrl
+                      : AppConfig.legalUrl('terms',
+                          Localizations.localeOf(context).languageCode),
                   mode: LaunchMode.externalApplication,
                 ),
                 child: Text(context.tr('Kullanım Koşulları', 'Terms of Use')),
               ),
-              if (defaultTargetPlatform == TargetPlatform.iOS)
+              if (!kIsWeb &&
+                  (defaultTargetPlatform == TargetPlatform.iOS ||
+                      defaultTargetPlatform == TargetPlatform.android))
                 TextButton(
                   onPressed: () => launchUrl(
-                    _manageSubscriptionsUrl,
+                    defaultTargetPlatform == TargetPlatform.iOS
+                        ? _appleSubscriptionsUrl
+                        : _googlePlaySubscriptionsUrl,
                     mode: LaunchMode.externalApplication,
                   ),
                   child: Text(
@@ -172,8 +183,10 @@ class _SubscriptionOfferCard extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              context.tr('Süre: 1 yıl • Fiyat: $price / yıl',
-                  'Length: 1 year • Price: $price / year'),
+              context.tr(
+                  'Süre: 1 yıl • Fiyat: $price / yıl',
+                  'Length: 1 year • Price: $price / year',
+                  'Срок: 1 год • Цена: $price в год'),
             ),
             const SizedBox(height: 4),
             Text(
@@ -219,9 +232,12 @@ class _PlanColumns extends StatelessWidget {
                 Expanded(
                   child: _PlanCard(
                     title: 'Pro',
-                    price: context.tr('$proPrice / yıl', '$proPrice / year'),
-                    subtitle: context.tr('Görüşme, kurye ve uzun geçmiş.',
-                        'Calling, courier tools, and extended history.'),
+                    price: context.tr('$proPrice / yıl', '$proPrice / year',
+                        '$proPrice в год'),
+                    subtitle: context.tr(
+                        'Sesli/görüntülü görüşme, kurye notları ve 90 günlük geçmiş.',
+                        'Audio/video calls, courier notes, and 90-day history.',
+                        'Аудио- и видеозвонки, заметки для курьеров и история за 90 дней.'),
                     icon: Icons.workspace_premium_rounded,
                     accent: AppColors.warning,
                     features: PlanCatalog.proFeatures,
@@ -256,7 +272,8 @@ class _CurrentPlanCard extends StatelessWidget {
     if (plan.isTrial) {
       return context.tr(
           "3 günlük ücretsiz Pro denemen devam ediyor. Bu bir App Store aboneliği değildir. Ücretli abonelik tamamlandığında bu alan 'Mevcut planın: Pro' olarak değişir ve satın alma düğmesi kapanır.",
-          "Your free 3-day Pro trial is active. This is not an App Store subscription. After a paid subscription is completed, this area changes to 'Current plan: Pro' and the purchase button is disabled.");
+          "Your free 3-day Pro trial is active. This is not a store subscription. After a paid subscription is completed, this area changes to 'Current plan: Pro' and the purchase button is disabled.",
+          "Активен бесплатный пробный период Pro на 3 дня. Это не подписка магазина. После оплаты здесь появится «Текущий тариф: Pro», а кнопка покупки отключится.");
     }
     if (plan.isPro) {
       return context.tr(
@@ -265,7 +282,8 @@ class _CurrentPlanCard extends StatelessWidget {
     }
     return context.tr(
         "Free planın aktif. Dilediğin zaman yıllık $proPrice karşılığında Pro'ya geçebilirsin.",
-        'Your Free plan is active. You can upgrade to Pro for $proPrice per year at any time.');
+        'Your Free plan is active. You can upgrade to Pro for $proPrice per year at any time.',
+        'Активен тариф Free. Перейти на Pro можно в любое время за $proPrice в год.');
   }
 
   @override
@@ -400,14 +418,18 @@ class _FeatureRow extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(feature.titleFor(context.isEnglish),
+                  Text(
+                      feature.titleFor(
+                          Localizations.localeOf(context).languageCode),
                       style: TextStyle(
                           fontSize: compact ? 11 : 14,
                           height: compact ? 1.3 : 1.5,
                           fontWeight: FontWeight.w700)),
                   if (!compact) ...[
                     const SizedBox(height: 2),
-                    Text(feature.detailFor(context.isEnglish),
+                    Text(
+                        feature.detailFor(
+                            Localizations.localeOf(context).languageCode),
                         style: Theme.of(context)
                             .textTheme
                             .bodySmall

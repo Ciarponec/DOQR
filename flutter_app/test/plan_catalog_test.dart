@@ -61,7 +61,7 @@ void main() {
       controller: languageController,
       child: MaterialApp(
         locale: const Locale('tr'),
-        supportedLocales: const [Locale('tr'), Locale('en')],
+        supportedLocales: const [Locale('tr'), Locale('en'), Locale('ru')],
         localizationsDelegates: const [
           GlobalMaterialLocalizations.delegate,
           GlobalWidgetsLocalizations.delegate,
@@ -73,7 +73,8 @@ void main() {
     ));
 
     expect(find.text('Mevcut planın: Pro Deneme'), findsOneWidget);
-    expect(find.textContaining('bir App Store aboneliği değildir'), findsOneWidget);
+    expect(find.textContaining('bir App Store aboneliği değildir'),
+        findsOneWidget);
     expect(find.text('Free'), findsOneWidget);
     expect(find.text('Pro'), findsOneWidget);
     // The purchase UI must not hardcode a storefront price. StoreKit replaces
@@ -94,8 +95,7 @@ void main() {
     );
     expect(find.text('DOQR Pro Yıllık'), findsOneWidget);
     expect(find.textContaining('Süre: 1 yıl'), findsOneWidget);
-    final trialPurchaseButton =
-        find.textContaining('Pro aboneliğini başlat');
+    final trialPurchaseButton = find.textContaining('Pro aboneliğini başlat');
     for (var i = 0; i < 10 && trialPurchaseButton.evaluate().isEmpty; i++) {
       await tester.drag(
         find.byType(Scrollable).first,
@@ -135,7 +135,7 @@ void main() {
       controller: languageController,
       child: MaterialApp(
         locale: const Locale('tr'),
-        supportedLocales: const [Locale('tr'), Locale('en')],
+        supportedLocales: const [Locale('tr'), Locale('en'), Locale('ru')],
         localizationsDelegates: const [
           GlobalMaterialLocalizations.delegate,
           GlobalWidgetsLocalizations.delegate,
@@ -186,7 +186,7 @@ void main() {
       controller: languageController,
       child: MaterialApp(
         locale: const Locale('en'),
-        supportedLocales: const [Locale('tr'), Locale('en')],
+        supportedLocales: const [Locale('tr'), Locale('en'), Locale('ru')],
         localizationsDelegates: const [
           GlobalMaterialLocalizations.delegate,
           GlobalWidgetsLocalizations.delegate,
@@ -215,6 +215,53 @@ void main() {
     );
     expect(find.text('Privacy Policy'), findsOneWidget);
     expect(find.text('Terms of Use'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('plan ekranı ve plan özellikleri Rusça gösterilir',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final languageController =
+        AppLanguageController(initialLocale: const Locale('ru'));
+    addTearDown(languageController.dispose);
+
+    const freePlan = PlanItem(
+      id: 'free',
+      displayName: 'Free',
+      annualPriceUsdCents: 0,
+      maxDoors: 1,
+      maxHostsPerDoor: 1,
+      logRetentionDays: null,
+      logRetentionCount: 3,
+      monthlyAudioSeconds: 0,
+      monthlyVideoSeconds: 0,
+      features: {},
+      subscriptionStatus: 'inactive',
+      currentPeriodEnd: null,
+      trialEndsAt: null,
+      isTrial: false,
+    );
+
+    await tester.pumpWidget(AppLanguageScope(
+      controller: languageController,
+      child: MaterialApp(
+        locale: const Locale('ru'),
+        supportedLocales: const [Locale('tr'), Locale('en'), Locale('ru')],
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        theme: buildDoqrTheme(),
+        home: const PlansScreen(currentPlan: freePlan),
+      ),
+    ));
+
+    expect(find.text('Планы'), findsOneWidget);
+    expect(find.text('Сравнить планы'), findsOneWidget);
+    expect(find.text('Неограниченные вызовы посетителей'), findsOneWidget);
+    expect(find.text('1 цифровой звонок и 1 управляющий'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

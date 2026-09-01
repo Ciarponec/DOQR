@@ -21,15 +21,20 @@ final navigatorKey = GlobalKey<NavigatorState>();
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   AppConfig.validate();
+  final initialLocale = await AppLanguageController.resolveInitialLocale(
+    deviceLocale: WidgetsBinding.instance.platformDispatcher.locale,
+  );
   await Supabase.initialize(
       url: AppConfig.supabaseUrl, publishableKey: AppConfig.supabaseKey);
-  runApp(const ProviderScope(child: DoqrApp()));
+  runApp(ProviderScope(child: DoqrApp(initialLocale: initialLocale)));
   unawaited(StorePurchaseService.instance.initialize());
   unawaited(NotificationService.instance.initialize());
 }
 
 class DoqrApp extends StatefulWidget {
-  const DoqrApp({super.key});
+  final Locale initialLocale;
+
+  const DoqrApp({super.key, required this.initialLocale});
 
   @override
   State<DoqrApp> createState() => _DoqrAppState();
@@ -41,8 +46,8 @@ class _DoqrAppState extends State<DoqrApp> {
   @override
   void initState() {
     super.initState();
-    _languageController = AppLanguageController();
-    unawaited(_languageController.load());
+    _languageController =
+        AppLanguageController(initialLocale: widget.initialLocale);
     NotificationService.instance.attachNavigator(navigatorKey);
   }
 
@@ -63,7 +68,7 @@ class _DoqrAppState extends State<DoqrApp> {
             debugShowCheckedModeBanner: false,
             theme: buildDoqrTheme(),
             locale: _languageController.locale,
-            supportedLocales: const [Locale('tr'), Locale('en')],
+            supportedLocales: const [Locale('tr'), Locale('en'), Locale('ru')],
             localizationsDelegates: const [
               GlobalMaterialLocalizations.delegate,
               GlobalWidgetsLocalizations.delegate,
@@ -98,8 +103,13 @@ class AuthGate extends StatelessWidget {
           AuthChangeEvent.initialSession,
           Supabase.instance.client.auth.currentSession,
         ),
-        builder: (context, snapshot) => snapshot.data?.session == null
-            ? const AuthScreen()
-            : const HomeScreen(),
+        builder: (context, snapshot) {
+          if (snapshot.data?.event == AuthChangeEvent.passwordRecovery) {
+            return const ResetPasswordScreen();
+          }
+          return snapshot.data?.session == null
+              ? const AuthScreen()
+              : const HomeScreen();
+        },
       );
 }

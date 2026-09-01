@@ -1,8 +1,8 @@
 # DOQR ziyaretçi webi
 
-Bu klasör uygulama yüklemeyen ziyaretçinin statik web deneyiminin kaynak sürümüdür. Sayfa QR tokenini doğrular, güvenlik bilgilendirmesi ve onay alır, Supabase Anonymous Auth oturumu açar ve hostun izin verdiği yazı/ses/video seçeneklerini gösterir.
+Bu klasör uygulama yüklemeyen ziyaretçinin statik web deneyiminin kaynak sürümüdür. Sayfa QR tokenini doğrular, güvenlik bilgilendirmesi ve açık onay alır, Supabase Anonymous Auth oturumu açar ve kapı zilini çalar. Kapı yöneticisi yazılı yanıt verebilir veya ziyaretçiden sesli/görüntülü görüşme izni isteyebilir.
 
-Kurye şirketi ziyaretçinin doğrulanmamış beyanıdır. Cihaz verilerinden kurye tahmini yapılmaz; hazır not ve teslimat kodu host onayı olmadan gösterilmez.
+Kurye şirketi ziyaretçinin doğrulanmamış beyanıdır. Cihaz verilerinden kurye tahmini yapılmaz; hazır not ve teslimat kodu kapı yöneticisinin onayı olmadan gösterilmez.
 
 ## Yerel servis
 

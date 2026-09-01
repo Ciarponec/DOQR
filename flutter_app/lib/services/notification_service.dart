@@ -10,8 +10,8 @@ import 'doqr_api.dart';
 
 const _ringChannel = AndroidNotificationChannel(
   'doqr_rings',
-  'Kapı zili',
-  description: 'Yeni ziyaretçi ve dijital zil bildirimleri',
+  'DOQR Doorbell',
+  description: 'DOQR visitor alerts',
   importance: Importance.max,
   playSound: true,
 );
@@ -49,10 +49,10 @@ NotificationDetails _ringNotificationDetails(RemoteMessage message) =>
         additionalFlags:
             Int32List.fromList(const <int>[_insistentNotificationFlag]),
         actions: message.data['courier_note_available'] == 'true'
-            ? const [
+            ? [
                 AndroidNotificationAction(
                   'share_delivery_code',
-                  'Teslimat kodunu gönder',
+                  message.data['delivery_action_label'] ?? 'Send delivery code',
                   showsUserInterface: true,
                 ),
               ]
@@ -73,10 +73,10 @@ Future<void> _showDoorbellNotification(
       id: _ringNotificationId,
       title: message.notification?.title ??
           message.data['notification_title'] ??
-          'DOQR: Zil çalıyor',
+          'DOQR: Doorbell ringing',
       body: message.notification?.body ??
           message.data['notification_body'] ??
-          'Kapıda bir ziyaretçi var',
+          'A visitor is at the door',
       notificationDetails: _ringNotificationDetails(message),
       payload: _ringId(message),
     );

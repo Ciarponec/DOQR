@@ -19,4 +19,10 @@ void main() {
       throwsArgumentError,
     );
   });
+
+  test('legal pages resolve for Turkish, English, and Russian', () {
+    expect(AppConfig.legalUrl('privacy', 'tr').path, '/DOQR/privacy.html');
+    expect(AppConfig.legalUrl('privacy', 'en').path, '/DOQR/privacy-en.html');
+    expect(AppConfig.legalUrl('privacy', 'ru').path, '/DOQR/privacy-ru.html');
+  });
 }

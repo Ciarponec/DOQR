@@ -16,6 +16,8 @@ class _FakeAuthGateway implements AuthGateway {
   String? pendingEmail;
   AuthException? signInError;
   AuthException? resendError;
+  int passwordResetCount = 0;
+  String? passwordResetEmail;
 
   @override
   Stream<AuthException> get authErrors => authErrorController.stream;
@@ -36,6 +38,12 @@ class _FakeAuthGateway implements AuthGateway {
   @override
   Future<void> savePendingConfirmationEmail(String email) async {
     pendingEmail = email;
+  }
+
+  @override
+  Future<void> sendPasswordReset({required String email}) async {
+    passwordResetCount++;
+    passwordResetEmail = email;
   }
 
   @override
@@ -63,7 +71,7 @@ void main() {
       controller: languageController,
       child: MaterialApp(
         locale: const Locale('tr'),
-        supportedLocales: const [Locale('tr'), Locale('en')],
+        supportedLocales: const [Locale('tr'), Locale('en'), Locale('ru')],
         localizationsDelegates: const [
           GlobalMaterialLocalizations.delegate,
           GlobalWidgetsLocalizations.delegate,
@@ -84,9 +92,10 @@ void main() {
   testWidgets('giriş ve kayıt modları açıkça ayrılır', (tester) async {
     await pumpEntry(tester);
 
-    expect(find.text('Host hesabına giriş yap'), findsOneWidget);
+    expect(find.text('Kapı yöneticisi hesabına giriş yap'), findsOneWidget);
     expect(find.text('Giriş yap'), findsWidgets);
     expect(find.text('Kayıt olmadan dene'), findsOneWidget);
+    expect(find.text('Şifremi unuttum'), findsOneWidget);
 
     await tester.tap(find.text('Hesap oluştur').first);
     await tester.pump();
@@ -94,6 +103,87 @@ void main() {
     expect(find.text('Ücretsiz hesap oluştur'), findsOneWidget);
     expect(find.text('Hesabı oluştur'), findsOneWidget);
     expect(find.text('En az 8 karakter.'), findsOneWidget);
+  });
+
+  testWidgets('giriş ekranı Rusça ve tutarlı gösterilir', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final languageController =
+        AppLanguageController(initialLocale: const Locale('ru'));
+    addTearDown(languageController.dispose);
+    await tester.pumpWidget(AppLanguageScope(
+      controller: languageController,
+      child: MaterialApp(
+        locale: const Locale('ru'),
+        supportedLocales: const [Locale('tr'), Locale('en'), Locale('ru')],
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        theme: buildDoqrTheme(),
+        home: AuthScreen(authGateway: _FakeAuthGateway()),
+      ),
+    ));
+
+    expect(find.text('Ваша дверь находится на расстоянии одного сканирования.'),
+        findsOneWidget);
+    expect(find.text('Войдите в учётную запись управляющего дверью'),
+        findsOneWidget);
+    expect(find.text('Управляйте дверным звонком и входящими посетителями.'),
+        findsOneWidget);
+    expect(find.text('Забыли пароль?'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('parola sıfırlama bağlantısı istenir', (tester) async {
+    final authGateway = _FakeAuthGateway();
+    await pumpEntry(tester, authGateway: authGateway);
+    await tester.enterText(find.byType(TextField).first, 'tester@example.com');
+    await tester.ensureVisible(find.text('Şifremi unuttum'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Şifremi unuttum'));
+    await tester.pump();
+
+    expect(authGateway.passwordResetCount, 1);
+    expect(authGateway.passwordResetEmail, 'tester@example.com');
+    expect(
+        find.textContaining('Parola sıfırlama bağlantısını'), findsOneWidget);
+  });
+
+  testWidgets('demo küçük ekranda ve büyük metinde taşma yapmaz',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(320, 568));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final languageController = AppLanguageController();
+    addTearDown(languageController.dispose);
+
+    await tester.pumpWidget(AppLanguageScope(
+      controller: languageController,
+      child: MediaQuery(
+        data: const MediaQueryData(textScaler: TextScaler.linear(1.6)),
+        child: MaterialApp(
+          locale: const Locale('tr'),
+          supportedLocales: const [Locale('tr'), Locale('en'), Locale('ru')],
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          theme: buildDoqrTheme(),
+          home: const DemoScreen(),
+        ),
+      ),
+    ));
+
+    expect(find.text('Kayıt olmadan örnek akış'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.ensureVisible(find.text('Örnek zili çal'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Örnek zili çal'));
+    await tester.pump();
+    expect(find.text('Anında bildirim alırsınız'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('kayıtsız deneme veri kaydetmeyen örneği açar', (tester) async {

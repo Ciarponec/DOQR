@@ -1,11 +1,11 @@
 {
-    "name": "doqr_app",
-    "short_name": "doqr_app",
+    "name": "DOQR Digital Doorbell",
+    "short_name": "DOQR",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#111936",
+    "theme_color": "#111936",
+    "description": "Manage your DOQR digital doorbells, visitors, and QR codes.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
