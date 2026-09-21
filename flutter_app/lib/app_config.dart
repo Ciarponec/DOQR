@@ -1,5 +1,18 @@
 class AppConfig {
   static const authRedirectUrl = 'com.doqr.app://auth/callback';
+
+  static String authEmailRedirect(String languageCode, {Uri? webBase}) {
+    final language =
+        {'tr', 'en', 'ru'}.contains(languageCode) ? languageCode : 'tr';
+    final base = webBase ?? Uri.parse(authRedirectUrl);
+    // Return to the app entry point without copying old auth parameters or a
+    // hash route. Keep the language marker last for the Go email template.
+    return base
+        .replace(queryParameters: {'email_language': language})
+        .removeFragment()
+        .toString();
+  }
+
   static const supabaseUrl = String.fromEnvironment(
     'SUPABASE_URL',
     defaultValue: 'https://warsaqcfovasaitcwtxy.supabase.co',

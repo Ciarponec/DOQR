@@ -16,8 +16,12 @@ class _FakeAuthGateway implements AuthGateway {
   String? pendingEmail;
   AuthException? signInError;
   AuthException? resendError;
+  Future<String?>? pendingEmailLoad;
   int passwordResetCount = 0;
   String? passwordResetEmail;
+  String? signupLanguage;
+  String? resendLanguage;
+  String? resetLanguage;
 
   @override
   Stream<AuthException> get authErrors => authErrorController.stream;
@@ -26,10 +30,13 @@ class _FakeAuthGateway implements AuthGateway {
   Future<void> clearPendingConfirmationEmail() async => pendingEmail = null;
 
   @override
-  Future<String?> loadPendingConfirmationEmail() async => pendingEmail;
+  Future<String?> loadPendingConfirmationEmail() async =>
+      pendingEmailLoad == null ? pendingEmail : await pendingEmailLoad!;
 
   @override
-  Future<void> resendSignupConfirmation({required String email}) async {
+  Future<void> resendSignupConfirmation(
+      {required String email, required String languageCode}) async {
+    resendLanguage = languageCode;
     if (resendError != null) throw resendError!;
     resendCount++;
     resentEmail = email;
@@ -41,7 +48,9 @@ class _FakeAuthGateway implements AuthGateway {
   }
 
   @override
-  Future<void> sendPasswordReset({required String email}) async {
+  Future<void> sendPasswordReset(
+      {required String email, required String languageCode}) async {
+    resetLanguage = languageCode;
     passwordResetCount++;
     passwordResetEmail = email;
   }
@@ -53,8 +62,12 @@ class _FakeAuthGateway implements AuthGateway {
 
   @override
   Future<bool> signUp(
-          {required String email, required String password}) async =>
-      false;
+      {required String email,
+      required String password,
+      required String languageCode}) async {
+    signupLanguage = languageCode;
+    return false;
+  }
 }
 
 void main() {
@@ -62,15 +75,16 @@ void main() {
     WidgetTester tester, {
     AuthGateway? authGateway,
     Duration resendCooldown = const Duration(seconds: 60),
+    Locale locale = const Locale('tr'),
   }) async {
     await tester.binding.setSurfaceSize(const Size(390, 844));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    final languageController = AppLanguageController();
+    final languageController = AppLanguageController(initialLocale: locale);
     addTearDown(languageController.dispose);
     await tester.pumpWidget(AppLanguageScope(
       controller: languageController,
       child: MaterialApp(
-        locale: const Locale('tr'),
+        locale: locale,
         supportedLocales: const [Locale('tr'), Locale('en'), Locale('ru')],
         localizationsDelegates: const [
           GlobalMaterialLocalizations.delegate,
@@ -95,6 +109,9 @@ void main() {
     expect(find.text('Kapı yöneticisi hesabına giriş yap'), findsOneWidget);
     expect(find.text('Giriş yap'), findsWidgets);
     expect(find.text('Kayıt olmadan dene'), findsOneWidget);
+    expect(
+        find.widgetWithText(FilledButton, 'Kayıt olmadan dene').hitTestable(),
+        findsOneWidget);
     expect(find.text('Şifremi unuttum'), findsOneWidget);
 
     await tester.tap(find.text('Hesap oluştur').first);
@@ -103,6 +120,59 @@ void main() {
     expect(find.text('Ücretsiz hesap oluştur'), findsOneWidget);
     expect(find.text('Hesabı oluştur'), findsOneWidget);
     expect(find.text('En az 8 karakter.'), findsOneWidget);
+  });
+
+  for (final language in ['tr', 'en', 'ru']) {
+    testWidgets('kayıt ve yeniden gönderme seçilen $language dilini kullanır',
+        (tester) async {
+      final gateway = _FakeAuthGateway();
+      await pumpEntry(tester,
+          authGateway: gateway,
+          locale: Locale(language),
+          resendCooldown: const Duration(seconds: 1));
+      await tester.ensureVisible(find.byType(ChoiceChip).at(1));
+      await tester.tap(find.byType(ChoiceChip).at(1));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+          find.byType(TextField).at(0), 'tester@example.com');
+      await tester.enterText(find.byType(TextField).at(1), 'password123');
+      final submit = find.byType(FilledButton).last;
+      await tester.ensureVisible(submit);
+      await tester.pumpAndSettle();
+      await tester.tap(submit);
+      await tester.pump();
+      expect(gateway.signupLanguage, language);
+      await tester.pump(const Duration(seconds: 1));
+
+      // Rebuild in a different selected language while preserving the pending account.
+      final nextLanguage = language == 'en' ? 'ru' : 'en';
+      await pumpEntry(tester,
+          authGateway: gateway,
+          locale: Locale(nextLanguage),
+          resendCooldown: const Duration(seconds: 1));
+      await tester.pumpAndSettle();
+      final resend =
+          find.widgetWithIcon(TextButton, Icons.mark_email_unread_outlined);
+      await tester.ensureVisible(resend);
+      await tester.pumpAndSettle();
+      await tester.tap(resend);
+      await tester.pump();
+      expect(gateway.resendLanguage, nextLanguage);
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
+
+  testWidgets('parola sıfırlama seçilen İngilizce dilini gönderir',
+      (tester) async {
+    final gateway = _FakeAuthGateway();
+    await pumpEntry(tester, authGateway: gateway, locale: const Locale('en'));
+    await tester.enterText(find.byType(TextField).first, 'tester@example.com');
+    final reset = find.text('Forgot password');
+    await tester.ensureVisible(reset);
+    await tester.pumpAndSettle();
+    await tester.tap(reset);
+    await tester.pump();
+    expect(gateway.resetLanguage, 'en');
   });
 
   testWidgets('giriş ekranı Rusça ve tutarlı gösterilir', (tester) async {
@@ -126,8 +196,7 @@ void main() {
       ),
     ));
 
-    expect(find.text('Ваша дверь находится на расстоянии одного сканирования.'),
-        findsOneWidget);
+    expect(find.text('Ваш дверной звонок с QR-кодом.'), findsOneWidget);
     expect(find.text('Войдите в учётную запись управляющего дверью'),
         findsOneWidget);
     expect(find.text('Управляйте дверным звонком и входящими посетителями.'),
@@ -149,6 +218,106 @@ void main() {
     expect(authGateway.passwordResetEmail, 'tester@example.com');
     expect(
         find.textContaining('Parola sıfırlama bağlantısını'), findsOneWidget);
+  });
+
+  testWidgets('bekleyen doğrulama yeniden açılışta geri yüklenir',
+      (tester) async {
+    final gateway = _FakeAuthGateway()..pendingEmail = 'tester@example.com';
+    await pumpEntry(tester, authGateway: gateway);
+    await tester.pumpAndSettle();
+    expect(
+        tester.widget<TextField>(find.byType(TextField).first).controller!.text,
+        'tester@example.com');
+    expect(find.textContaining('Doğrulanacak adres: tester@example.com'),
+        findsOneWidget);
+    final resend =
+        find.widgetWithText(TextButton, 'Doğrulama e-postasını yeniden gönder');
+    await tester.ensureVisible(resend);
+    await tester.pumpAndSettle();
+    await tester.tap(resend);
+    await tester.pump();
+    expect(gateway.resentEmail, 'tester@example.com');
+    expect(gateway.resendCount, 1);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('e-posta gelmediyse şifresiz yeniden gönderme yapılır',
+      (tester) async {
+    final gateway = _FakeAuthGateway();
+    await pumpEntry(tester, authGateway: gateway);
+    final missing = find.text('Doğrulama e-postası gelmedi mi?');
+    await tester.ensureVisible(missing);
+    await tester.pumpAndSettle();
+    await tester.tap(missing);
+    await tester.pump();
+    expect(gateway.resendCount, 0);
+    expect(find.textContaining('Önce kayıt olurken'), findsOneWidget);
+    await tester.enterText(find.byType(TextField).first, 'tester@example.com');
+    await tester.ensureVisible(missing);
+    await tester.pumpAndSettle();
+    await tester.tap(missing);
+    await tester.pump();
+    expect(gateway.resentEmail, 'tester@example.com');
+    expect(gateway.pendingEmail, 'tester@example.com');
+    expect(gateway.resendCount, 1);
+    expect(find.text('60 sn sonra yeniden gönder'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('bekleyen yanlış adres değiştirilebilir', (tester) async {
+    final gateway = _FakeAuthGateway()..pendingEmail = 'wrong@example.com';
+    await pumpEntry(tester, authGateway: gateway);
+    await tester.pumpAndSettle();
+    final change = find.text('Farklı e-posta kullan');
+    await tester.ensureVisible(change);
+    await tester.pumpAndSettle();
+    await tester.tap(change);
+    await tester.pump();
+    expect(gateway.pendingEmail, isNull);
+    await tester.enterText(find.byType(TextField).first, 'correct@example.com');
+    final missing = find.text('Doğrulama e-postası gelmedi mi?');
+    await tester.ensureVisible(missing);
+    await tester.pumpAndSettle();
+    await tester.tap(missing);
+    await tester.pump();
+    expect(gateway.resentEmail, 'correct@example.com');
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('geç yüklenen kayıt yazılmakta olan adresi değiştirmez',
+      (tester) async {
+    final saved = Completer<String?>();
+    final gateway = _FakeAuthGateway()..pendingEmailLoad = saved.future;
+    await pumpEntry(tester, authGateway: gateway);
+    await tester.enterText(find.byType(TextField).first, 'new@example.com');
+    saved.complete('old@example.com');
+    await tester.pumpAndSettle();
+    expect(
+        tester.widget<TextField>(find.byType(TextField).first).controller!.text,
+        'new@example.com');
+    expect(find.textContaining('Doğrulanacak adres:'), findsNothing);
+  });
+
+  testWidgets('yeniden gönderme sınırı çift gönderimi engeller',
+      (tester) async {
+    final gateway = _FakeAuthGateway()
+      ..pendingEmail = 'tester@example.com'
+      ..resendError =
+          const AuthException('Too many requests', statusCode: '429');
+    await pumpEntry(tester, authGateway: gateway);
+    await tester.pumpAndSettle();
+    final resend =
+        find.widgetWithText(TextButton, 'Doğrulama e-postasını yeniden gönder');
+    await tester.ensureVisible(resend);
+    await tester.pumpAndSettle();
+    await tester.tap(resend);
+    await tester.pump();
+    expect(find.textContaining('60 saniye bekle'), findsOneWidget);
+    final waiting =
+        find.widgetWithText(TextButton, '60 sn sonra yeniden gönder');
+    expect(tester.widget<TextButton>(waiting).onPressed, isNull);
+    expect(gateway.resendCount, 0);
+    await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets('demo küçük ekranda ve büyük metinde taşma yapmaz',

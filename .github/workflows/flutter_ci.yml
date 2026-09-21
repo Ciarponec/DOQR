@@ -10,6 +10,17 @@ permissions:
   contents: read
 
 jobs:
+  auth-emails:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.1'
+          cache: false
+      - name: Validate localized auth email subjects and bodies
+        run: go run scripts/check_auth_email_templates.go
+
   flutter:
     runs-on: ubuntu-latest
     defaults:

@@ -156,6 +156,9 @@ site_url = "https://ciarponec.github.io/DOQR/"
 additional_redirect_urls = [
   "https://ciarponec.github.io/DOQR/",
   "com.doqr.app://auth/callback",
+  "com.doqr.app://auth/callback?email_language=tr",
+  "com.doqr.app://auth/callback?email_language=en",
+  "com.doqr.app://auth/callback?email_language=ru",
   "http://127.0.0.1:3000",
 ]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
@@ -237,11 +240,11 @@ subject = "DOQR davetini kabul et"
 content_path = "./supabase/templates/invite.html"
 
 [auth.email.template.confirmation]
-subject = "DOQR hesabını doğrula"
+subject = '{{$l:=print .Data.language}}{{$r:=.RedirectTo}}{{if ge (len $r) 2}}{{$s:=slice $r (len (slice $r 2))}}{{if eq $s "en" "ru" "tr"}}{{$l = $s}}{{end}}{{end}}DOQR: {{if eq $l "en"}}Verify email{{else if eq $l "ru"}}Подтверждение{{else}}E-posta onayı{{end}}'
 content_path = "./supabase/templates/confirmation.html"
 
 [auth.email.template.recovery]
-subject = "DOQR parolanı sıfırla"
+subject = '{{$l:=print .Data.language}}{{$r:=.RedirectTo}}{{if ge (len $r) 2}}{{$s:=slice $r (len (slice $r 2))}}{{if eq $s "en" "ru" "tr"}}{{$l = $s}}{{end}}{{end}}DOQR: {{if eq $l "en"}}Reset password{{else if eq $l "ru"}}Сброс пароля{{else}}Parola yenile{{end}}'
 content_path = "./supabase/templates/recovery.html"
 
 [auth.email.template.magic_link]

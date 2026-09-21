@@ -79,6 +79,15 @@ class _DemoScreenState extends State<DemoScreen> {
                             .bodyMedium
                             ?.copyWith(color: AppColors.muted),
                       ),
+                      const SizedBox(height: 18),
+                      Text(
+                        context.tr(
+                          'Kurulum: Hesap oluştur → dijital zil ekle → QR kodunu yazdırıp kapıya as.',
+                          'Setup: Create an account → add a doorbell → print the QR code and place it at your door.',
+                          'Настройка: Создайте аккаунт → добавьте звонок → распечатайте QR-код и разместите его у двери.',
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
                       const SizedBox(height: 28),
                       SoftIcon(content.icon, size: 72),
                       const SizedBox(height: 18),

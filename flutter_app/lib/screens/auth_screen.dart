@@ -14,13 +14,18 @@ import '../widgets/app_shell.dart';
 abstract class AuthGateway {
   Stream<AuthException> get authErrors;
 
-  Future<bool> signUp({required String email, required String password});
+  Future<bool> signUp(
+      {required String email,
+      required String password,
+      required String languageCode});
 
   Future<void> signIn({required String email, required String password});
 
-  Future<void> resendSignupConfirmation({required String email});
+  Future<void> resendSignupConfirmation(
+      {required String email, required String languageCode});
 
-  Future<void> sendPasswordReset({required String email});
+  Future<void> sendPasswordReset(
+      {required String email, required String languageCode});
 
   Future<void> savePendingConfirmationEmail(String email);
 
@@ -53,11 +58,16 @@ class SupabaseAuthGateway implements AuthGateway {
   }
 
   @override
-  Future<bool> signUp({required String email, required String password}) async {
+  Future<bool> signUp(
+      {required String email,
+      required String password,
+      required String languageCode}) async {
     final result = await Supabase.instance.client.auth.signUp(
       email: email,
       password: password,
-      emailRedirectTo: kIsWeb ? null : AppConfig.authRedirectUrl,
+      data: {'language': languageCode},
+      emailRedirectTo: AppConfig.authEmailRedirect(languageCode,
+          webBase: kIsWeb ? Uri.base : null),
     );
     return result.session != null;
   }
@@ -68,18 +78,22 @@ class SupabaseAuthGateway implements AuthGateway {
           .signInWithPassword(email: email, password: password);
 
   @override
-  Future<void> resendSignupConfirmation({required String email}) =>
+  Future<void> resendSignupConfirmation(
+          {required String email, required String languageCode}) =>
       Supabase.instance.client.auth.resend(
         type: OtpType.signup,
         email: email,
-        emailRedirectTo: kIsWeb ? null : AppConfig.authRedirectUrl,
+        emailRedirectTo: AppConfig.authEmailRedirect(languageCode,
+            webBase: kIsWeb ? Uri.base : null),
       );
 
   @override
-  Future<void> sendPasswordReset({required String email}) =>
+  Future<void> sendPasswordReset(
+          {required String email, required String languageCode}) =>
       Supabase.instance.client.auth.resetPasswordForEmail(
         email,
-        redirectTo: kIsWeb ? Uri.base.toString() : AppConfig.authRedirectUrl,
+        redirectTo: AppConfig.authEmailRedirect(languageCode,
+            webBase: kIsWeb ? Uri.base : null),
       );
 
   @override
@@ -136,6 +150,55 @@ class _AuthScreenState extends State<AuthScreen> {
     super.initState();
     authGateway = widget.authGateway ?? const SupabaseAuthGateway();
     authErrorSubscription = authGateway.authErrors.listen(_handleAuthError);
+    unawaited(_restorePendingConfirmation());
+  }
+
+  Future<void> _restorePendingConfirmation() async {
+    try {
+      final savedEmail = await authGateway.loadPendingConfirmationEmail();
+      if (!mounted ||
+          savedEmail == null ||
+          savedEmail.isEmpty ||
+          email.text.isNotEmpty ||
+          loading ||
+          pendingConfirmationEmail != null) {
+        return;
+      }
+      email.text = savedEmail;
+      _showResendForUnconfirmedAccount(savedEmail);
+    } catch (_) {
+      // Local storage is optional; signing in and requesting a link still work.
+    }
+  }
+
+  Future<void> _requestMissingConfirmation() async {
+    final mail = email.text.trim();
+    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(mail)) {
+      setState(() => error = context.tr(
+          'Önce kayıt olurken kullandığın e-posta adresini gir.',
+          'First enter the email address you used to sign up.',
+          'Сначала введите адрес электронной почты, указанный при регистрации.'));
+      return;
+    }
+    _showResendForUnconfirmedAccount(mail);
+    await _resendConfirmation();
+  }
+
+  Future<void> _changeConfirmationEmail() async {
+    try {
+      await authGateway.clearPendingConfirmationEmail();
+    } catch (exception) {
+      if (mounted) setState(() => error = userErrorMessage(exception));
+      return;
+    }
+    if (!mounted) return;
+    resendTimer?.cancel();
+    setState(() {
+      pendingConfirmationEmail = null;
+      resendSeconds = 0;
+      info = null;
+      error = null;
+    });
   }
 
   @override
@@ -222,7 +285,9 @@ class _AuthScreenState extends State<AuthScreen> {
       error = null;
     });
     try {
-      await authGateway.resendSignupConfirmation(email: mail);
+      await authGateway.resendSignupConfirmation(
+          email: mail,
+          languageCode: Localizations.localeOf(context).languageCode);
       await authGateway.savePendingConfirmationEmail(mail);
       if (mounted) {
         _startResendCooldown(
@@ -269,6 +334,7 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Future<void> _submit() async {
+    if (loading || resending || resettingPassword) return;
     final create = createMode;
     final mail = email.text.trim();
     final secret = password.text;
@@ -291,8 +357,10 @@ class _AuthScreenState extends State<AuthScreen> {
     });
     try {
       if (create) {
-        final hasSession =
-            await authGateway.signUp(email: mail, password: secret);
+        final hasSession = await authGateway.signUp(
+            email: mail,
+            password: secret,
+            languageCode: Localizations.localeOf(context).languageCode);
         if (!hasSession) {
           await authGateway.savePendingConfirmationEmail(mail);
           if (mounted) {
@@ -318,6 +386,7 @@ class _AuthScreenState extends State<AuthScreen> {
       if (!mounted) return;
       if (!create && exception.code == 'email_not_confirmed') {
         await authGateway.savePendingConfirmationEmail(mail);
+        if (!mounted) return;
         _showResendForUnconfirmedAccount(mail);
       } else {
         setState(() => error = userErrorMessage(exception));
@@ -334,6 +403,7 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Future<void> _requestPasswordReset() async {
+    if (loading || resending || resettingPassword) return;
     final mail = email.text.trim();
     if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(mail)) {
       return setState(() => error = context.tr(
@@ -347,7 +417,9 @@ class _AuthScreenState extends State<AuthScreen> {
       info = null;
     });
     try {
-      await authGateway.sendPasswordReset(email: mail);
+      await authGateway.sendPasswordReset(
+          email: mail,
+          languageCode: Localizations.localeOf(context).languageCode);
       if (mounted) {
         setState(() => info = context.tr(
             'Parola sıfırlama bağlantısını $mail adresine gönderdik. Gelen kutunuzu ve spam klasörünü kontrol edin.',
@@ -394,8 +466,10 @@ class _AuthScreenState extends State<AuthScreen> {
                     ),
                     const SizedBox(height: 28),
                     Text(
-                      context.tr('Kapınız, tek taramayla ulaşılabilir.',
-                          'Your door is one scan away.'),
+                      context.tr(
+                          'QR kodlu dijital kapı ziliniz.',
+                          'Your QR code doorbell.',
+                          'Ваш дверной звонок с QR-кодом.'),
                       style: Theme.of(context)
                           .textTheme
                           .displaySmall
@@ -404,11 +478,37 @@ class _AuthScreenState extends State<AuthScreen> {
                     const SizedBox(height: 12),
                     Text(
                       context.tr(
-                          'Ziyaretçiler uygulama kurmadan QR’ı tarar. Siz anında haberdar olur, güvenle yanıt verirsiniz.',
-                          'Visitors scan the QR code without installing an app. You are notified instantly and respond securely.'),
+                          'Kapınız için QR kod oluşturup kapıya asın. Ziyaretçi kodu tarayıp zili çalsın; siz telefonunuzdan yanıtlayın. Ziyaretçinin uygulama yüklemesi gerekmez.',
+                          'Create a QR code and place it at your door. Visitors scan it to ring your bell; you answer on your phone. Visitors do not need to install an app.',
+                          'Создайте QR-код и разместите его у двери. Посетители сканируют код и звонят, а вы отвечаете с телефона. Им не нужно устанавливать приложение.'),
                       style: Theme.of(context)
                           .textTheme
                           .bodyLarge
+                          ?.copyWith(color: const Color(0xFFBFCBF1)),
+                    ),
+                    const SizedBox(height: 18),
+                    FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: AppColors.navy,
+                      ),
+                      onPressed: loading
+                          ? null
+                          : () => Navigator.of(context).pushNamed('/demo'),
+                      icon: const Icon(Icons.play_circle_outline_rounded),
+                      label: Text(context.tr(
+                          'Kayıt olmadan dene', 'Try without an account')),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      context.tr(
+                          'Örnek zili çalın, nasıl çalıştığını görün.',
+                          'Ring a sample bell and see how it works.',
+                          'Позвоните в пробный звонок и узнайте, как это работает.'),
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
                           ?.copyWith(color: const Color(0xFFBFCBF1)),
                     ),
                     const SizedBox(height: 18),
@@ -439,16 +539,6 @@ class _AuthScreenState extends State<AuthScreen> {
                                     error = null;
                                     info = null;
                                   }),
-                        ),
-                        TextButton.icon(
-                          style: TextButton.styleFrom(
-                              foregroundColor: Colors.white),
-                          onPressed: loading
-                              ? null
-                              : () => Navigator.of(context).pushNamed('/demo'),
-                          icon: const Icon(Icons.play_circle_outline_rounded),
-                          label: Text(context.tr(
-                              'Kayıt olmadan dene', 'Try without an account')),
                         ),
                       ],
                     ),
@@ -506,8 +596,7 @@ class _AuthScreenState extends State<AuthScreen> {
                                         ? AutofillHints.newPassword
                                         : AutofillHints.password,
                                   ],
-                                  onSubmitted: (_) =>
-                                      loading ? null : _submit(),
+                                  onSubmitted: (_) => _submit(),
                                   decoration: InputDecoration(
                                     labelText: context.tr('Şifre', 'Password'),
                                     helperText: createMode
@@ -529,7 +618,9 @@ class _AuthScreenState extends State<AuthScreen> {
                                   Align(
                                     alignment: Alignment.centerRight,
                                     child: TextButton(
-                                      onPressed: loading || resettingPassword
+                                      onPressed: loading ||
+                                              resending ||
+                                              resettingPassword
                                           ? null
                                           : _requestPasswordReset,
                                       child: resettingPassword
@@ -554,12 +645,32 @@ class _AuthScreenState extends State<AuthScreen> {
                             _Message(text: error!, color: AppColors.danger),
                           if (pendingConfirmationEmail != null)
                             Padding(
+                              padding: const EdgeInsets.only(top: 12),
+                              child: Text(context.tr(
+                                'Doğrulanacak adres: $pendingConfirmationEmail',
+                                'Address to verify: $pendingConfirmationEmail',
+                                'Адрес для подтверждения: $pendingConfirmationEmail',
+                              )),
+                            ),
+                          if (pendingConfirmationEmail != null)
+                            _Message(
+                              text: context.tr(
+                                'E-postayı göremiyor musun? Spam / Gereksiz klasörünü ve diğer gelen kutusu sekmelerini kontrol et. Posta kutunda “DOQR” diye ara. E-postamızı spam klasöründe bulursan “Spam değil” olarak işaretle.',
+                                'Cannot find the email? Check Spam / Junk and your other inbox tabs. Search your mailbox for “DOQR”. If our email is in Spam, mark it as “Not spam”.',
+                                'Не видите письмо? Проверьте папку «Спам» и другие вкладки входящих. Найдите «DOQR» в почте. Если наше письмо попало в спам, отметьте его как «Не спам».',
+                              ),
+                              color: AppColors.ink,
+                            ),
+                          if (pendingConfirmationEmail != null)
+                            Padding(
                               padding: const EdgeInsets.only(top: 8),
                               child: TextButton.icon(
-                                onPressed:
-                                    loading || resending || resendSeconds > 0
-                                        ? null
-                                        : _resendConfirmation,
+                                onPressed: loading ||
+                                        resending ||
+                                        resettingPassword ||
+                                        resendSeconds > 0
+                                    ? null
+                                    : _resendConfirmation,
                                 icon: resending
                                     ? const SizedBox(
                                         width: 18,
@@ -579,9 +690,35 @@ class _AuthScreenState extends State<AuthScreen> {
                                         'Resend verification email')),
                               ),
                             ),
+                          if (pendingConfirmationEmail == null)
+                            TextButton(
+                              onPressed:
+                                  loading || resending || resettingPassword
+                                      ? null
+                                      : _requestMissingConfirmation,
+                              child: Text(context.tr(
+                                'Doğrulama e-postası gelmedi mi?',
+                                'Verification email not received?',
+                                'Не пришло письмо для подтверждения?',
+                              )),
+                            ),
+                          if (pendingConfirmationEmail != null)
+                            TextButton(
+                              onPressed:
+                                  loading || resending || resettingPassword
+                                      ? null
+                                      : _changeConfirmationEmail,
+                              child: Text(context.tr(
+                                'Farklı e-posta kullan',
+                                'Use a different email',
+                                'Использовать другой адрес',
+                              )),
+                            ),
                           const SizedBox(height: 18),
                           FilledButton(
-                            onPressed: loading ? null : _submit,
+                            onPressed: loading || resending || resettingPassword
+                                ? null
+                                : _submit,
                             child: loading
                                 ? const SizedBox(
                                     width: 22,
