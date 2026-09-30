@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -71,13 +73,24 @@ class _FakeAuthGateway implements AuthGateway {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  setUpAll(() async {
+    final fontLoader = FontLoader('Manrope')
+      ..addFont(rootBundle.load('assets/fonts/Manrope-Variable.ttf'));
+    await fontLoader.load();
+  });
+
   Future<void> pumpEntry(
     WidgetTester tester, {
     AuthGateway? authGateway,
     Duration resendCooldown = const Duration(seconds: 60),
     Locale locale = const Locale('tr'),
+    Size surfaceSize = const Size(390, 844),
+    double textScale = 1,
+    double keyboardHeight = 0,
+    bool resetPassword = false,
   }) async {
-    await tester.binding.setSurfaceSize(const Size(390, 844));
+    await tester.binding.setSurfaceSize(surfaceSize);
     addTearDown(() => tester.binding.setSurfaceSize(null));
     final languageController = AppLanguageController(initialLocale: locale);
     addTearDown(languageController.dispose);
@@ -92,11 +105,20 @@ void main() {
           GlobalCupertinoLocalizations.delegate,
         ],
         theme: buildDoqrTheme(),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.linear(textScale),
+            viewInsets: EdgeInsets.only(bottom: keyboardHeight),
+          ),
+          child: child!,
+        ),
         routes: {
-          '/': (_) => AuthScreen(
-                authGateway: authGateway ?? _FakeAuthGateway(),
-                resendCooldown: resendCooldown,
-              ),
+          '/': (_) => resetPassword
+              ? const ResetPasswordScreen()
+              : AuthScreen(
+                  authGateway: authGateway ?? _FakeAuthGateway(),
+                  resendCooldown: resendCooldown,
+                ),
           '/demo': (_) => const DemoScreen(),
         },
       ),
@@ -121,6 +143,66 @@ void main() {
     expect(find.text('Hesabı oluştur'), findsOneWidget);
     expect(find.text('En az 8 karakter.'), findsOneWidget);
   });
+
+  for (final entry in const {
+    'tr': 'En az 8 karakter.',
+    'en': 'At least 8 characters.',
+    'ru': 'Не менее 8 символов.',
+  }.entries) {
+    for (final resetPassword in [false, true]) {
+      testWidgets(
+          '${entry.key} parola ipucu ${resetPassword ? "yenilemede" : "kayıtta"} dar ekranda tam okunur',
+          (tester) async {
+        for (final scale in [1.0, 2.0, 3.0]) {
+          await pumpEntry(tester,
+              locale: Locale(entry.key),
+              surfaceSize: const Size(320, 568),
+              textScale: scale,
+              keyboardHeight: 240,
+              resetPassword: resetPassword);
+          await tester.pumpAndSettle();
+          if (!resetPassword) {
+            final createAccount = find.byWidgetPredicate(
+                (widget) => widget is ChoiceChip && !widget.selected);
+            await tester.scrollUntilVisible(createAccount, 150,
+                scrollable: find.byType(Scrollable).first, maxScrolls: 80);
+            await tester.pumpAndSettle();
+            await tester.tap(createAccount);
+            await tester.pumpAndSettle();
+          }
+
+          final hint = find.text(entry.value);
+          await tester.scrollUntilVisible(hint, 150,
+              scrollable: find.byType(Scrollable).first, maxScrolls: 80);
+          await tester.pumpAndSettle();
+          final paragraph = tester.renderObject<RenderParagraph>(
+              find.descendant(of: hint, matching: find.byType(RichText)));
+          expect(paragraph.didExceedMaxLines, isFalse);
+          expect(paragraph.text.toPlainText(), entry.value);
+          // Verify the laid-out glyphs fit, rather than just finding the string.
+          // Wrapped trailing spaces can extend past the line box; check the
+          // visible words, including the final punctuation, instead.
+          final boxes = RegExp(r'\S+').allMatches(entry.value).expand((word) =>
+              paragraph.getBoxesForSelection(TextSelection(
+                  baseOffset: word.start, extentOffset: word.end)));
+          expect(boxes, isNotEmpty);
+          for (final box in boxes) {
+            // Allow subpixel glyph/letter-spacing rounding at the last edge.
+            expect(box.left, greaterThanOrEqualTo(-0.5));
+            expect(box.right, lessThanOrEqualTo(paragraph.size.width + 0.5));
+            expect(box.bottom, lessThanOrEqualTo(paragraph.size.height + 0.5));
+          }
+          final rect = tester.getRect(hint);
+          expect(rect.left, greaterThanOrEqualTo(0));
+          expect(rect.right, lessThanOrEqualTo(320));
+          expect(rect.top, greaterThanOrEqualTo(0));
+          expect(rect.bottom, lessThanOrEqualTo(568 - 240));
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox());
+        }
+      });
+    }
+  }
 
   for (final language in ['tr', 'en', 'ru']) {
     testWidgets('kayıt ve yeniden gönderme seçilen $language dilini kullanır',
@@ -351,7 +433,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Örnek zili çal'));
     await tester.pump();
-    expect(find.text('Anında bildirim alırsınız'), findsOneWidget);
+    expect(find.text('Anında bildirim alırsın'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -366,7 +448,7 @@ void main() {
 
     await tester.tap(find.text('Örnek zili çal'));
     await tester.pump();
-    expect(find.text('Anında bildirim alırsınız'), findsOneWidget);
+    expect(find.text('Anında bildirim alırsın'), findsOneWidget);
   });
 
   testWidgets('doğrulama e-postası bekleme sonrası yeniden gönderilir',

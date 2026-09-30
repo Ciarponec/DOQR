@@ -407,7 +407,7 @@ class _AuthScreenState extends State<AuthScreen> {
     final mail = email.text.trim();
     if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(mail)) {
       return setState(() => error = context.tr(
-          'Önce geçerli e-posta adresinizi girin.',
+          'Önce geçerli e-posta adresini gir.',
           'Enter your valid email address first.',
           'Сначала введите действительный адрес электронной почты.'));
     }
@@ -422,7 +422,7 @@ class _AuthScreenState extends State<AuthScreen> {
           languageCode: Localizations.localeOf(context).languageCode);
       if (mounted) {
         setState(() => info = context.tr(
-            'Parola sıfırlama bağlantısını $mail adresine gönderdik. Gelen kutunuzu ve spam klasörünü kontrol edin.',
+            'Parola sıfırlama bağlantısını $mail adresine gönderdik. Gelen kutunu ve spam klasörünü kontrol et.',
             'We sent a password reset link to $mail. Check your inbox and spam folder.',
             'Ссылка для сброса пароля отправлена на $mail. Проверьте входящие и папку «Спам».'));
       }
@@ -467,7 +467,7 @@ class _AuthScreenState extends State<AuthScreen> {
                     const SizedBox(height: 28),
                     Text(
                       context.tr(
-                          'QR kodlu dijital kapı ziliniz.',
+                          'QR kodlu dijital kapı zilin.',
                           'Your QR code doorbell.',
                           'Ваш дверной звонок с QR-кодом.'),
                       style: Theme.of(context)
@@ -478,7 +478,7 @@ class _AuthScreenState extends State<AuthScreen> {
                     const SizedBox(height: 12),
                     Text(
                       context.tr(
-                          'Kapınız için QR kod oluşturup kapıya asın. Ziyaretçi kodu tarayıp zili çalsın; siz telefonunuzdan yanıtlayın. Ziyaretçinin uygulama yüklemesi gerekmez.',
+                          'Kapın için QR kod oluşturup kapıya as. Ziyaretçi kodu tarayıp zili çalsın; sen telefonundan yanıtla. Ziyaretçinin uygulama yüklemesi gerekmez.',
                           'Create a QR code and place it at your door. Visitors scan it to ring your bell; you answer on your phone. Visitors do not need to install an app.',
                           'Создайте QR-код и разместите его у двери. Посетители сканируют код и звонят, а вы отвечаете с телефона. Им не нужно устанавливать приложение.'),
                       style: Theme.of(context)
@@ -502,7 +502,7 @@ class _AuthScreenState extends State<AuthScreen> {
                     const SizedBox(height: 8),
                     Text(
                       context.tr(
-                          'Örnek zili çalın, nasıl çalıştığını görün.',
+                          'Örnek zili çal, nasıl çalıştığını gör.',
                           'Ring a sample bell and see how it works.',
                           'Позвоните в пробный звонок и узнайте, как это работает.'),
                       textAlign: TextAlign.center,
@@ -599,9 +599,8 @@ class _AuthScreenState extends State<AuthScreen> {
                                   onSubmitted: (_) => _submit(),
                                   decoration: InputDecoration(
                                     labelText: context.tr('Şifre', 'Password'),
-                                    helperText: createMode
-                                        ? context.tr('En az 8 karakter.',
-                                            'At least 8 characters.')
+                                    helper: createMode
+                                        ? const _PasswordLengthHint()
                                         : null,
                                     prefixIcon:
                                         const Icon(Icons.lock_outline_rounded),
@@ -824,7 +823,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                   const SoftIcon(Icons.lock_reset_rounded, size: 72),
                   const SizedBox(height: 22),
                   Text(
-                    context.tr('Yeni şifre belirleyin', 'Set a new password',
+                    context.tr('Yeni şifre belirle', 'Set a new password',
                         'Задайте новый пароль'),
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.headlineMedium,
@@ -832,7 +831,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                   const SizedBox(height: 8),
                   Text(
                     context.tr(
-                        'Hesabınızı korumak için başka yerde kullanmadığınız güçlü bir şifre seçin.',
+                        'Hesabını korumak için başka yerde kullanmadığın güçlü bir şifre seç.',
                         'Choose a strong password that you do not use elsewhere.',
                         'Выберите надёжный пароль, который вы не используете в других сервисах.'),
                     textAlign: TextAlign.center,
@@ -849,8 +848,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                     decoration: InputDecoration(
                       labelText: context.tr(
                           'Yeni şifre', 'New password', 'Новый пароль'),
-                      helperText: context.tr('En az 8 karakter.',
-                          'At least 8 characters.', 'Не менее 8 символов.'),
+                      helper: const _PasswordLengthHint(),
                       prefixIcon: const Icon(Icons.lock_outline_rounded),
                       suffixIcon: IconButton(
                         onPressed: () => setState(() => obscure = !obscure),
@@ -866,7 +864,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                     obscureText: obscure,
                     onSubmitted: (_) => loading ? null : _save(),
                     decoration: InputDecoration(
-                      labelText: context.tr('Yeni şifreyi doğrulayın',
+                      labelText: context.tr('Yeni şifreyi doğrula',
                           'Confirm new password', 'Повторите новый пароль'),
                       prefixIcon: const Icon(Icons.verified_user_outlined),
                     ),
@@ -891,6 +889,24 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
             ),
           ),
         ),
+      );
+}
+
+class _PasswordLengthHint extends StatelessWidget {
+  const _PasswordLengthHint();
+
+  @override
+  Widget build(BuildContext context) => Text(
+        context.tr('En az 8 karakter.', 'At least 8 characters.',
+            'Не менее 8 символов.'),
+        // InputDecoration.helperText truncates soft wraps by default. Let this
+        // helper grow with the selected language and accessibility text size.
+        softWrap: true,
+        overflow: TextOverflow.visible,
+        style: Theme.of(context)
+            .textTheme
+            .bodyMedium
+            ?.copyWith(color: AppColors.muted),
       );
 }
 

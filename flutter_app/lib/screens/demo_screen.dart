@@ -19,17 +19,17 @@ class _DemoScreenState extends State<DemoScreen> {
     final content = switch (_step) {
       0 => _DemoStep(
           icon: Icons.qr_code_scanner_rounded,
-          title: context.tr('Bir ziyaretçi QR kodunuzu tarar',
-              'A visitor scans your QR code'),
+          title: context.tr(
+              'Bir ziyaretçi QR kodunu tarar', 'A visitor scans your QR code'),
           body: context.tr(
-              'Uygulama yüklemeden yalnızca zili çalar; arama türünü siz seçersiniz.',
+              'Uygulama yüklemeden yalnızca zili çalar; arama türünü sen seçersin.',
               'Without installing the app, they only ring the bell; you choose how to respond.'),
           action: context.tr('Örnek zili çal', 'Ring the sample bell'),
         ),
       1 => _DemoStep(
           icon: Icons.notifications_active_rounded,
-          title: context.tr('Anında bildirim alırsınız',
-              'You receive an instant notification'),
+          title: context.tr(
+              'Anında bildirim alırsın', 'You receive an instant notification'),
           body: context.tr(
               'Kapı yöneticisi; yazılı, sesli veya görüntülü yanıtı tek dokunuşla seçer.',
               'The door manager chooses a text, audio, or video response with one tap.',
